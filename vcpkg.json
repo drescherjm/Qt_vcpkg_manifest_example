@@ -2,8 +2,8 @@
   "name": "my-test-qt-project",
   "version-string": "0.1.0",
   "dependencies": [
-    "qtbase",
-	"qttools"
+    "qt5-base",
+	"qt5-tools"
   ]
 }
 
