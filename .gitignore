@@ -44,3 +44,8 @@ cmake_install.cmake
 CMakeFiles
 build
 vcpkg_installed
+*.dir/*
+Debug
+Release
+x86
+x64
