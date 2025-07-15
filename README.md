@@ -1,5 +1,5 @@
-# Qt6_vcpkg_manifest_example
-This is a simple vcpkg manifest example that creates a small test Qt6 project.
+# Qt_vcpkg_manifest_example
+This is a simple vcpkg manifest example that creates a small test Qt5 or Qt6 project.
 
 I first cloned vcpkg to the parent folder of this project so that parent/vcpkg exists.
 
