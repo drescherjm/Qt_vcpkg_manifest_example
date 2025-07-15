@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 3.21)
 
+set(_LAST_QT_VERSION "${SELECT_QT_VERSION}")
+get_property(_cached_LAST_QT_VERSION CACHE LAST_QT_VERSION PROPERTY VALUE)
+
 set(SELECT_QT_VERSION "Qt6" CACHE STRING "Please select the Qt version.")
 set_property(CACHE SELECT_QT_VERSION PROPERTY STRINGS "Qt5" "Qt6")
 
@@ -8,6 +11,22 @@ string(TOLOWER "${SELECT_QT_VERSION}" VCPKG_FEATURE_NAME)
 
 #Tell vcpkg the feature to use!
 list(APPEND VCPKG_MANIFEST_FEATURES ${VCPKG_FEATURE_NAME})
+
+MESSAGE(STATUS "Current=${SELECT_QT_VERSION} Last=${_LAST_QT_VERSION}")
+
+if(DEFINED _cached_LAST_QT_VERSION AND NOT _LAST_QT_VERSION STREQUAL _cached_LAST_QT_VERSION)
+    message(STATUS "Qt version has changed from '${_cached_LAST_QT_VERSION}' to '${_LAST_QT_VERSION}'")
+   	#Clear any Qt* variables from the previous.
+	get_cmake_property(_cacheVars CACHE_VARIABLES)
+	foreach(_var ${_cacheVars})
+		if(_var MATCHES "^Qt")
+			message(STATUS "Unsetting cache variable: ${_var}")
+			unset(${_var} CACHE)
+		endif()
+	endforeach()
+endif()
+
+set(LAST_QT_VERSION "${SELECT_QT_VERSION}" CACHE INTERNAL "Last configured value of SELECT_QT_VERSION")
 
 project(vcpkg_qt_manifest_mode_example LANGUAGES CXX)
 
