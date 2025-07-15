@@ -1,6 +1,17 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(TestProject0_WithQt6 LANGUAGES CXX)
+set(SELECT_QT_VERSION "Qt6" CACHE STRING "Please select the Qt version.")
+set_property(CACHE SELECT_QT_VERSION PROPERTY STRINGS "Qt5" "Qt6")
+
+#With vcpkg features must be lowercase so we convert to qt5 and qt6 with the following:
+string(TOLOWER "${SELECT_QT_VERSION}" VCPKG_FEATURE_NAME)
+
+#Tell vcpkg the feature to use!
+list(APPEND VCPKG_MANIFEST_FEATURES ${VCPKG_FEATURE_NAME})
+
+project(vcpkg_qt_manifest_mode_example LANGUAGES CXX)
+
+set(LOCAL_PROJECT_NAME ${PROJECT_NAME})
 
 # Enable C++17 or later
 set(CMAKE_CXX_STANDARD 17)
@@ -12,6 +23,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Find Qt via vcpkg if not found fail hard!
 find_package(QT NAMES Qt5 Qt6 REQUIRED)
 
+# The ability to support Qt5 or Qt6 is based on the following stackoverflow answer:
+# https://stackoverflow.com/a/71131723/487892
+
 #Create a variable containing Qt5 or Qt6
 set(QT Qt${QT_VERSION_MAJOR})
 
@@ -22,8 +36,6 @@ set(APP_QT_TARGETS ${QT}::Core ${QT}::Widgets)
 
 # Here everything is simple - find the modules we need.
 find_package(${QT} REQUIRED ${APP_QT_MODULES})
-
-set(LOCAL_PROJECT_NAME TestProject0_WithQt6)
 
 add_executable(${LOCAL_PROJECT_NAME} main.cpp)
 
