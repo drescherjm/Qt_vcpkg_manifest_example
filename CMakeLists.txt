@@ -28,7 +28,7 @@ endif()
 
 set(LAST_QT_VERSION "${SELECT_QT_VERSION}" CACHE INTERNAL "Last configured value of SELECT_QT_VERSION")
 
-project(vcpkg_qt_manifest_mode_example LANGUAGES CXX)
+project(vcpkg_qt_manifest_mode_example VERSION 1.0.0 DESCRIPTION "A sample project" LANGUAGES CXX)
 
 set(LOCAL_PROJECT_NAME ${PROJECT_NAME})
 
@@ -75,3 +75,103 @@ if (QT_VERSION_MAJOR EQUAL 6)
 		)
 	endif()
 endif()
+
+install(TARGETS ${LOCAL_PROJECT_NAME}
+    RUNTIME DESTINATION bin
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+)
+
+#install(CODE "
+#    include(BundleUtilities)
+#    message(STATUS BundleExecutable=\"${CMAKE_INSTALL_PREFIX}/bin/$<TARGET_FILE:${LOCAL_PROJECT_NAME}>\")
+#    fixup_bundle(\"${CMAKE_INSTALL_PREFIX}/bin/vcpkg_qt_manifest_mode_example\" \"\"  \"\")
+#    " COMPONENT Runtime
+#)
+
+include(InstallRequiredSystemLibraries)
+
+if(UNIX AND NOT APPLE)
+    # Platforms plugin
+    if(QT_VERSION_MAJOR EQUAL 6)
+        get_target_property(QT_PLAT_PLUGIN Qt6::QXcbIntegrationPlugin LOCATION)
+    else()
+        get_target_property(QT_PLAT_PLUGIN Qt5::QXcbIntegrationPlugin LOCATION)
+    endif()
+    get_filename_component(QT_PLAT_PLUGIN_DIR "${QT_PLAT_PLUGIN}" DIRECTORY)
+    install(DIRECTORY "${QT_PLAT_PLUGIN_DIR}/"
+        DESTINATION "lib/${CMAKE_PROJECT_NAME}/platforms"
+        FILES_MATCHING PATTERN "libq*.so"
+    )
+
+    # Imageformats plugin (optional but common)
+    if(QT_VERSION_MAJOR EQUAL 6)
+        get_target_property(QT_IMG_PLUGIN Qt6::QJpegPlugin LOCATION)
+    else()
+        get_target_property(QT_IMG_PLUGIN Qt5::QJpegPlugin LOCATION)
+    endif()
+    get_filename_component(QT_IMG_PLUGIN_DIR "${QT_IMG_PLUGIN}" DIRECTORY)
+    install(DIRECTORY "${QT_IMG_PLUGIN_DIR}/"
+        DESTINATION "lib/${CMAKE_PROJECT_NAME}/imageformats"
+        FILES_MATCHING PATTERN "libq*.so"
+    )
+endif()
+
+# Install runtime dependencies
+install(CODE [[
+    file(GET_RUNTIME_DEPENDENCIES
+        EXECUTABLES "$<TARGET_FILE:vcpkg_qt_manifest_mode_example>"
+        RESOLVED_DEPENDENCIES_VAR deps
+        UNRESOLVED_DEPENDENCIES_VAR unresolved
+    )
+
+    foreach(dep IN LISTS deps)
+        file(INSTALL
+            DESTINATION bin
+            TYPE SHARED_LIBRARY
+            FOLLOW_SYMLINK_CHAIN
+            FILES "${dep}"
+        )
+    endforeach()
+
+    list(LENGTH unresolved unresolved_count)
+    if(unresolved_count GREATER 0)
+        message(WARNING "Unresolved dependencies: ${unresolved}")
+    endif()
+]])
+
+
+# ─── CPack packaging setup ───────────────────────────────
+
+# Basic CPack settings
+set(CPACK_PACKAGE_NAME "${PROJECT_NAME}")
+set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+set(CPACK_PACKAGE_CONTACT "you@example.com")
+set(CPACK_PACKAGE_VENDOR "Your Name or Company")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Example Qt app packaged via CPack")
+
+if(WIN32)
+  # NSIS installer on Windows
+  set(CPACK_GENERATOR "NSIS")
+  set(CPACK_NSIS_MODIFY_PATH ON)
+  set(CPACK_NSIS_DISPLAY_NAME "${PROJECT_NAME} Installer")
+  set(CPACK_NSIS_PACKAGE_NAME "${PROJECT_NAME}")
+  #set(CPACK_NSIS_INSTALLED_ICON_NAME "bin\\\\myapp.exe")
+elseif(UNIX AND EXISTS "/etc/debian_version")
+  # DEB package
+  set(CPACK_GENERATOR "DEB")
+  set(CPACK_DEBIAN_PACKAGE_MAINTAINER "you@example.com")
+  set(CPACK_DEBIAN_PACKAGE_DEPENDS "libc6 (>= 2.29)")
+  set(CPACK_DEBIAN_PACKAGE_SECTION "utils")
+elseif(UNIX AND EXISTS "/etc/redhat-release")
+  # RPM package
+  set(CPACK_GENERATOR "RPM")
+  set(CPACK_RPM_PACKAGE_LICENSE "MIT")
+  set(CPACK_RPM_PACKAGE_RELEASE 1)
+  set(CPACK_RPM_PACKAGE_GROUP "Applications/Utilities")
+endif()
+
+include(CPack)
+
+
+
