@@ -91,6 +91,9 @@ install(TARGETS ${LOCAL_PROJECT_NAME}
 
 include(InstallRequiredSystemLibraries)
 
+
+set(PLATFORM_DEPENDENCIES)
+
 if(UNIX AND NOT APPLE)
     # Platforms plugin
     if(QT_VERSION_MAJOR EQUAL 6)
@@ -98,6 +101,9 @@ if(UNIX AND NOT APPLE)
     else()
         get_target_property(QT_PLAT_PLUGIN Qt5::QXcbIntegrationPlugin LOCATION)
     endif()
+
+    set(PLATFORM_DEPENDENCIES ${QT_PLAT_PLUGIN} ${PLATFORM_DEPENDENCIES})
+
     get_filename_component(QT_PLAT_PLUGIN_DIR "${QT_PLAT_PLUGIN}" DIRECTORY)
     install(DIRECTORY "${QT_PLAT_PLUGIN_DIR}/"
         DESTINATION "lib/${CMAKE_PROJECT_NAME}/platforms"
@@ -117,17 +123,22 @@ if(UNIX AND NOT APPLE)
     )
 endif()
 
+install(CODE "set(PLATFORM_DEPENDENCIES \"${PLATFORM_DEPENDENCIES}\")")
+
+message( STATUS PLATFORM_DEPENDENCIES=${PLATFORM_DEPENDENCIES} )
 # Install runtime dependencies
 install(CODE [[
     file(GET_RUNTIME_DEPENDENCIES
+        LIBRARIES ${PLATFORM_DEPENDENCIES}
         EXECUTABLES "$<TARGET_FILE:vcpkg_qt_manifest_mode_example>"
         RESOLVED_DEPENDENCIES_VAR deps
         UNRESOLVED_DEPENDENCIES_VAR unresolved
     )
 
     foreach(dep IN LISTS deps)
+        message( STATUS "Processing dependency: " ${dep})
         file(INSTALL
-            DESTINATION bin
+            DESTINATION /usr/local/lib
             TYPE SHARED_LIBRARY
             FOLLOW_SYMLINK_CHAIN
             FILES "${dep}"
@@ -136,7 +147,7 @@ install(CODE [[
 
     list(LENGTH unresolved unresolved_count)
     if(unresolved_count GREATER 0)
-        message(WARNING "Unresolved dependencies: ${unresolved}")
+        message(FATAL_ERROR "Unresolved dependencies: ${unresolved}")
     endif()
 ]])
 
@@ -159,6 +170,8 @@ if(WIN32)
   #set(CPACK_NSIS_INSTALLED_ICON_NAME "bin\\\\myapp.exe")
 elseif(UNIX AND EXISTS "/etc/debian_version")
   # DEB package
+  set(CMAKE_INSTALL_PREFIX /usr/local)
+  set(CPACK_PACKAGING_INSTALL_PREFIX /usr/local)
   set(CPACK_GENERATOR "DEB")
   set(CPACK_DEBIAN_PACKAGE_MAINTAINER "you@example.com")
   set(CPACK_DEBIAN_PACKAGE_DEPENDS "libc6 (>= 2.29)")
