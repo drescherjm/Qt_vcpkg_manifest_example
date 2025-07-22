@@ -47,7 +47,12 @@ CMakeFiles
 build
 vcpkg_installed
 *.dir/*
+_CPack*
 Debug
 Release
 x86
 x64
+install_manifest.txt
+output.txt
+qt.conf
+CPack*.cmake

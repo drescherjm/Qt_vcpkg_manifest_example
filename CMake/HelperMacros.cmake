@@ -22,6 +22,11 @@ function (_get_all_cmake_targets out_var current_dir)
     set(${out_var} ${targets} PARENT_SCOPE)
 endfunction()
 
+# One way to use this is:
+# _get_all_cmake_targets( CMAKE_TARGETS ${CMAKE_SOURCE_DIR} )
+# echo_targets( ${CMAKE_TARGETS} )
+
+
 #########################################################################################
 # The print_properties ... macros were taken from the following StackOverflow post:
 # https://stackoverflow.com/questions/32183975/how-to-print-all-the-properties-of-a-target-in-cmake

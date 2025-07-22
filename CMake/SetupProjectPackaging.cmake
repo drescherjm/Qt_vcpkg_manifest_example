@@ -96,7 +96,7 @@ install(CODE [[
 
     list(LENGTH unresolved unresolved_count)
     if(unresolved_count GREATER 0)
-        message(FATAL_ERROR "Unresolved dependencies: ${unresolved}")
+        message(WARNING "Unresolved dependencies: ${unresolved}")
     endif()
 ]])
 

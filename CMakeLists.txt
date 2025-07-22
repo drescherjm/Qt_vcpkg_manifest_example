@@ -1,32 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-set(_LAST_QT_VERSION "${SELECT_QT_VERSION}")
-get_property(_cached_LAST_QT_VERSION CACHE LAST_QT_VERSION PROPERTY VALUE)
-
-set(SELECT_QT_VERSION "Qt6" CACHE STRING "Please select the Qt version.")
-set_property(CACHE SELECT_QT_VERSION PROPERTY STRINGS "Qt5" "Qt6")
-
-#With vcpkg features must be lowercase so we convert to qt5 and qt6 with the following:
-string(TOLOWER "${SELECT_QT_VERSION}" VCPKG_FEATURE_NAME)
-
-#Tell vcpkg the feature to use!
-list(APPEND VCPKG_MANIFEST_FEATURES ${VCPKG_FEATURE_NAME})
-
-MESSAGE(STATUS "Current=${SELECT_QT_VERSION} Last=${_LAST_QT_VERSION}")
-
-if(DEFINED _cached_LAST_QT_VERSION AND NOT _LAST_QT_VERSION STREQUAL _cached_LAST_QT_VERSION)
-    message(STATUS "Qt version has changed from '${_cached_LAST_QT_VERSION}' to '${_LAST_QT_VERSION}'")
-   	#Clear any Qt* variables from the previous.
-	get_cmake_property(_cacheVars CACHE_VARIABLES)
-	foreach(_var ${_cacheVars})
-		if(_var MATCHES "^Qt")
-			message(STATUS "Unsetting cache variable: ${_var}")
-			unset(${_var} CACHE)
-		endif()
-	endforeach()
-endif()
-
-set(LAST_QT_VERSION "${SELECT_QT_VERSION}" CACHE INTERNAL "Last configured value of SELECT_QT_VERSION")
+include(CMake/SupportSwitchingQtVersionAsAFeature.cmake)
 
 project(vcpkg_qt_manifest_mode_example VERSION 1.0.0 DESCRIPTION "A sample project" LANGUAGES CXX)
 
@@ -83,5 +57,11 @@ if (QT_VERSION_MAJOR EQUAL 6)
 	endif()
 endif()
 
-include(CMake/SetupProjectPackaging.cmake)
+include(CMake/HelperMacros.cmake)
+_get_all_cmake_targets( CMAKE_TARGETS ${CMAKE_SOURCE_DIR} )
+echo_targets( ${CMAKE_TARGETS} )
 
+include(CMake/DeployQtInstall.cmake)
+install_qt_runtime(${LOCAL_PROJECT_NAME})
+
+include(CMake/SetupProjectPackaging.cmake)
