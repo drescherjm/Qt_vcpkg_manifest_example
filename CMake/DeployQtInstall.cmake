@@ -16,10 +16,10 @@ function(install_qt_runtime TARGET_NAME)
 		endif()
 		
         install(CODE "
-            message(STATUS \"Running windeployqt for ${TARGET_NAME}\")
-            execute_process(COMMAND \"${WINDEPLOYQT_EXECUTABLE}\" \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${QT_RUNTIME_DIR}/$<TARGET_FILE_NAME:${TARGET_NAME}>\")
-        ")
-
+            message(FATAL_ERROR \"Running windeployqt for TARGET=${TARGET_NAME} DESTDIR=$ENV{DESTDIR} CMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}\")
+            execute_process(COMMAND \"${WINDEPLOYQT_EXECUTABLE}\" \"${CMAKE_INSTALL_PREFIX}/${QT_RUNTIME_DIR}/$<TARGET_FILE_NAME:${TARGET_NAME}>\"  --verbose 2) 
+		")
+		
     elseif(APPLE)
         find_program(MACDEPLOYQT_EXECUTABLE macdeployqt REQUIRED)
 

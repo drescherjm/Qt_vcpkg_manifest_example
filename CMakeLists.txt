@@ -57,11 +57,57 @@ if (QT_VERSION_MAJOR EQUAL 6)
 	endif()
 endif()
 
-include(CMake/HelperMacros.cmake)
-_get_all_cmake_targets( CMAKE_TARGETS ${CMAKE_SOURCE_DIR} )
-echo_targets( ${CMAKE_TARGETS} )
+#include(CMake/HelperMacros.cmake)
+#_get_all_cmake_targets( CMAKE_TARGETS ${CMAKE_SOURCE_DIR} )
+#echo_targets( ${CMAKE_TARGETS} )
 
-include(CMake/DeployQtInstall.cmake)
-install_qt_runtime(${LOCAL_PROJECT_NAME})
+#include(CMake/DeployQtInstall.cmake)
+#install_qt_runtime(${LOCAL_PROJECT_NAME})
+
+include(CMake/InstallTargetRuntimeDependencies.cmake)
+
+install(TARGETS ${LOCAL_PROJECT_NAME}
+	RUNTIME_DEPENDENCY_SET MyDeps
+    RUNTIME DESTINATION bin
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+)
+
+add_executable_target_for_packaging( $<TARGET_FILE:${LOCAL_PROJECT_NAME}> )
+install_runtime_dependencies_of_packaging_targets()
+
+	if(MSVC)
+		install(CODE "set(RUNTIME_LIBRARY_DESTINATION \"bin\")")
+	else(MSVC)
+		install(CODE "set (RUNTIME_LIBRARY_DESTINATION \"/usr/local/${PROJECT_NAME}/lib\")")
+	endif(MSVC)
+
+#install(IMPOR
+
+    install(IMPORTED_RUNTIME_ARTIFACTS ${LOCAL_PROJECT_NAME}
+        LIBRARY DESTINATION lib
+        RUNTIME DESTINATION bin
+        )
+
+# install(RUNTIME_DEPENDENCY_SET MyDeps
+        # PRE_EXCLUDE_REGEXES [=[Azure]=] [=[api-ms-]=] [=[ext-ms-]=] [[kernel32\\.dll]] 
+        # POST_EXCLUDE_REGEXES [=[Azure]=] [=[.*system32\\/.*\\.dll]=] 
+		# POST_INCLUDE_FILES AzureAttestManager.dll wpaxholder.dll PdmUtilities.dll AzureAttestNormal.dll
+# )
+
+install(CODE [[
+	message(WARNING "Install prefix: ${CMAKE_INSTALL_PREFIX}")
+	]]
+)
+
+#FILE(GLOB MY_INCLUDES_H "${PROJECT_SOURCE_DIR}/include/*.h")
+
+
+# install(CODE [[ 
+	# file( GLOB MY_SHARED_LIBRARIES "$<TARGET_FILE_DIR:vcpkg_qt_manifest_mode_example>/*.dll" ) 
+	# message( WARNING MY_SHARED_LIBRARIES=${MY_SHARED_LIBRARIES})
+	# ]]
+# )
+
 
 include(CMake/SetupProjectPackaging.cmake)

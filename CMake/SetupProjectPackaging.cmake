@@ -27,6 +27,10 @@ install(TARGETS ${LOCAL_PROJECT_NAME}
     ARCHIVE DESTINATION lib
 )
 
+if (MSVC)
+	set(CMAKE_INSTALL_UCRT_LIBRARIES TRUE)
+endif()
+
 include(InstallRequiredSystemLibraries)
 
 set(PLATFORM_DEPENDENCIES)
@@ -76,29 +80,29 @@ endif(MSVC)
 
 message( STATUS PLATFORM_DEPENDENCIES=${PLATFORM_DEPENDENCIES} )
 # Install runtime dependencies
-install(CODE [[
-    file(GET_RUNTIME_DEPENDENCIES
-        LIBRARIES ${PLATFORM_DEPENDENCIES}
-        EXECUTABLES "$<TARGET_FILE:vcpkg_qt_manifest_mode_example>"
-        RESOLVED_DEPENDENCIES_VAR deps
-        UNRESOLVED_DEPENDENCIES_VAR unresolved
-    )
+# install(CODE [[
+    # file(GET_RUNTIME_DEPENDENCIES
+        # LIBRARIES ${PLATFORM_DEPENDENCIES}
+        # EXECUTABLES "$<TARGET_FILE:vcpkg_qt_manifest_mode_example>"
+        # RESOLVED_DEPENDENCIES_VAR deps
+        # UNRESOLVED_DEPENDENCIES_VAR unresolved
+    # )
 
-    foreach(dep IN LISTS deps)
-        message( STATUS "Processing dependency: " ${dep})
-        file(INSTALL
-            DESTINATION ${RUNTIME_LIBRARY_DESTINATION}
-            TYPE SHARED_LIBRARY
-            FOLLOW_SYMLINK_CHAIN
-            FILES "${dep}"
-        )
-    endforeach()
+    # foreach(dep IN LISTS deps)
+        # message( STATUS "Processing dependency: " ${dep})
+        # file(INSTALL
+            # DESTINATION ${RUNTIME_LIBRARY_DESTINATION}
+            # TYPE SHARED_LIBRARY
+            # FOLLOW_SYMLINK_CHAIN
+            # FILES "${dep}"
+        # )
+    # endforeach()
 
-    list(LENGTH unresolved unresolved_count)
-    if(unresolved_count GREATER 0)
-        message(WARNING "Unresolved dependencies: ${unresolved}")
-    endif()
-]])
+    # list(LENGTH unresolved unresolved_count)
+    # if(unresolved_count GREATER 0)
+        # message(WARNING "Unresolved dependencies: ${unresolved}")
+    # endif()
+# ]])
 
 # ─── CPack packaging setup ───────────────────────────────
 
@@ -115,6 +119,7 @@ if(WIN32)
   set(CPACK_NSIS_MODIFY_PATH ON)
   set(CPACK_NSIS_DISPLAY_NAME "${PROJECT_NAME} Installer")
   set(CPACK_NSIS_PACKAGE_NAME "${PROJECT_NAME}")
+  set(CPACK_PACKAGE_INSTALL_DIRECTORY "${PROJECT_NAME}/Package")
   #set(CPACK_NSIS_INSTALLED_ICON_NAME "bin\\\\myapp.exe")
 elseif(UNIX AND EXISTS "/etc/debian_version")
   # DEB package
