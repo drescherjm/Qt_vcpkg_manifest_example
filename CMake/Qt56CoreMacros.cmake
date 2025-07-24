@@ -10,482 +10,26 @@
 
 # Save the 'macros base dir' in a global property instead of a variable, to allow access in a
 # deferred function where the variable might not be accessible by the function scope.
-set_property(GLOBAL PROPERTY __qt_core_macros_module_base_dir "${CMAKE_CURRENT_LIST_DIR}")
-
-# macro used to create the names of output files preserving relative dirs
-macro(_qt_internal_make_output_file infile prefix ext outfile )
-    string(LENGTH ${CMAKE_CURRENT_BINARY_DIR} _binlength)
-    string(LENGTH ${infile} _infileLength)
-    set(_checkinfile ${CMAKE_CURRENT_SOURCE_DIR})
-    if(_infileLength GREATER _binlength)
-        string(SUBSTRING "${infile}" 0 ${_binlength} _checkinfile)
-        if(_checkinfile STREQUAL "${CMAKE_CURRENT_BINARY_DIR}")
-            file(RELATIVE_PATH rel ${CMAKE_CURRENT_BINARY_DIR} ${infile})
-        else()
-            file(RELATIVE_PATH rel ${CMAKE_CURRENT_SOURCE_DIR} ${infile})
-        endif()
-    else()
-        file(RELATIVE_PATH rel ${CMAKE_CURRENT_SOURCE_DIR} ${infile})
-    endif()
-    if(WIN32 AND rel MATCHES "^([a-zA-Z]):(.*)$") # absolute path
-        set(rel "${CMAKE_MATCH_1}_${CMAKE_MATCH_2}")
-    endif()
-    set(_outfile "${CMAKE_CURRENT_BINARY_DIR}/${rel}")
-    string(REPLACE ".." "__" _outfile ${_outfile})
-    get_filename_component(outpath ${_outfile} PATH)
-    if(CMAKE_VERSION VERSION_LESS "3.14")
-        get_filename_component(_outfile_ext ${_outfile} EXT)
-        get_filename_component(_outfile_ext ${_outfile_ext} NAME_WE)
-        get_filename_component(_outfile ${_outfile} NAME_WE)
-        string(APPEND _outfile ${_outfile_ext})
-    else()
-        get_filename_component(_outfile ${_outfile} NAME_WLE)
-    endif()
-    file(MAKE_DIRECTORY ${outpath})
-    set(${outfile} ${outpath}/${prefix}${_outfile}.${ext})
-endmacro()
-
-macro(_qt_internal_get_moc_flags _moc_flags)
-    set(${_moc_flags})
-    get_directory_property(_inc_DIRS INCLUDE_DIRECTORIES)
-
-    if(CMAKE_INCLUDE_CURRENT_DIR)
-        list(APPEND _inc_DIRS ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR})
-    endif()
-
-    foreach(_current ${_inc_DIRS})
-        if("${_current}" MATCHES "\\.framework/?$")
-            string(REGEX REPLACE "/[^/]+\\.framework" "" framework_path "${_current}")
-            set(${_moc_flags} ${${_moc_flags}} "-F${framework_path}")
-        else()
-            set(${_moc_flags} ${${_moc_flags}} "-I${_current}")
-        endif()
-    endforeach()
-
-    get_directory_property(_defines COMPILE_DEFINITIONS)
-    foreach(_current ${_defines})
-        set(${_moc_flags} ${${_moc_flags}} "-D${_current}")
-    endforeach()
-
-    if(WIN32)
-        set(${_moc_flags} ${${_moc_flags}} -DWIN32)
-    endif()
-    if (MSVC)
-        set(${_moc_flags} ${${_moc_flags}} --compiler-flavor=msvc)
-    endif()
-endmacro()
-
-# helper macro to set up a moc rule
-function(_qt_internal_create_moc_command infile outfile moc_flags moc_options
-         moc_target moc_depends out_json_file)
-    # Pass the parameters in a file.  Set the working directory to
-    # be that containing the parameters file and reference it by
-    # just the file name.  This is necessary because the moc tool on
-    # MinGW builds does not seem to handle spaces in the path to the
-    # file given with the @ syntax.
-    get_filename_component(_moc_outfile_name "${outfile}" NAME)
-    get_filename_component(_moc_outfile_dir "${outfile}" PATH)
-    if(_moc_outfile_dir)
-        set(_moc_working_dir WORKING_DIRECTORY ${_moc_outfile_dir})
-    endif()
-    set (_moc_parameters_file ${outfile}_parameters)
-    set (_moc_parameters ${moc_flags} ${moc_options} -o "${outfile}" "${infile}")
-    if(out_json_file)
-        list(APPEND _moc_parameters --output-json)
-        set(extra_output_files "${outfile}.json")
-        set(${out_json_file} "${extra_output_files}" PARENT_SCOPE)
-    endif()
-
-    if(moc_target)
-        set(_moc_parameters_file ${_moc_parameters_file}$<$<BOOL:$<CONFIG>>:_$<CONFIG>>)
-        set(targetincludes "$<TARGET_PROPERTY:${moc_target},INCLUDE_DIRECTORIES>")
-        set(targetdefines "$<TARGET_PROPERTY:${moc_target},COMPILE_DEFINITIONS>")
-
-        set(targetincludes "$<$<BOOL:${targetincludes}>:-I$<JOIN:${targetincludes},;-I>>")
-        set(targetdefines "$<$<BOOL:${targetdefines}>:-D$<JOIN:${targetdefines},;-D>>")
-        set(_moc_parameters_list_without_genex)
-        set(_moc_parameters_list_with_genex)
-        foreach(_moc_parameter ${_moc_parameters})
-            if(_moc_parameter MATCHES "\\\$<")
-                list(APPEND _moc_parameters_list_with_genex ${_moc_parameter})
-            else()
-                list(APPEND _moc_parameters_list_without_genex ${_moc_parameter})
-            endif()
-        endforeach()
-
-        string(REPLACE ">" "$<ANGLE-R>" _moc_escaped_parameters "${_moc_parameters_list_without_genex}")
-        string(REPLACE "," "$<COMMA>"   _moc_escaped_parameters "${_moc_escaped_parameters}")
-        string(REPLACE ";" "$<SEMICOLON>" _moc_escaped_parameters "${_moc_escaped_parameters}")
-        set(concatenated "$<$<BOOL:${targetincludes}>:${targetincludes};>$<$<BOOL:${targetdefines}>:${targetdefines};>$<$<BOOL:${_moc_escaped_parameters}>:${_moc_escaped_parameters};>")
-
-        list(APPEND concatenated ${_moc_parameters_list_with_genex})
-        set(concatenated "$<FILTER:$<REMOVE_DUPLICATES:${concatenated}>,EXCLUDE,^-[DI]$>")
-        set(concatenated "$<JOIN:${concatenated},\n>")
-
-        file (GENERATE
-            OUTPUT ${_moc_parameters_file}
-            CONTENT "${concatenated}"
-        )
-
-        set(concatenated)
-        set(targetincludes)
-        set(targetdefines)
-    else()
-        string (REPLACE ";" "\n" _moc_parameters "${_moc_parameters}")
-        file(WRITE ${_moc_parameters_file} "${_moc_parameters}\n")
-    endif()
-
-    set(_moc_extra_parameters_file @${_moc_parameters_file})
-    add_custom_command(OUTPUT ${outfile} ${extra_output_files}
-                       COMMAND ${QT_CMAKE_EXPORT_NAMESPACE}::moc ${_moc_extra_parameters_file}
-                       DEPENDS ${infile} ${moc_depends}
-                       ${_moc_working_dir}
-                       VERBATIM)
-    set_source_files_properties(${infile} PROPERTIES SKIP_AUTOMOC ON)
-    set_source_files_properties(${outfile} PROPERTIES SKIP_AUTOMOC ON
-                                                      SKIP_AUTOUIC ON
-    )
-    if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.27")
-        set_source_files_properties(${outfile} PROPERTIES SKIP_LINTING ON)
-    endif()
-endfunction()
-
-function(qt6_generate_moc infile outfile )
-    # get include dirs and flags
-    _qt_internal_get_moc_flags(moc_flags)
-    get_filename_component(abs_infile ${infile} ABSOLUTE)
-    set(_outfile "${outfile}")
-    if(NOT IS_ABSOLUTE "${outfile}")
-        set(_outfile "${CMAKE_CURRENT_BINARY_DIR}/${outfile}")
-    endif()
-    if ("x${ARGV2}" STREQUAL "xTARGET")
-        set(moc_target ${ARGV3})
-    endif()
-    _qt_internal_create_moc_command(${abs_infile} ${_outfile} "${moc_flags}" "" "${moc_target}"
-        "" # moc_depends
-        "" # out_json_file
-    )
-endfunction()
-
-if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    function(qt_generate_moc)
-        if(QT_DEFAULT_MAJOR_VERSION EQUAL 5)
-            qt5_generate_moc(${ARGV})
-        elseif(QT_DEFAULT_MAJOR_VERSION EQUAL 6)
-            qt6_generate_moc(${ARGV})
-        endif()
-    endfunction()
-endif()
-
-function(qt6_wrap_cpp)
-    # check if the first argument is a target
-    if(TARGET ${ARGV0})
-        _qt_internal_wrap_cpp(dummy TARGET ${ARGV})
-    else()
-        set(output_parameter ${ARGV0})
-        _qt_internal_wrap_cpp(${ARGV})
-        set(${output_parameter} "${${output_parameter}}" PARENT_SCOPE)
-    endif()
-
-    # Forward further return values of _qt_internal_wrap_cpp to the caller.
-    set(no_value_options "")
-    set(single_value_options __QT_INTERNAL_OUTPUT_MOC_JSON_FILES)
-    set(multi_value_options "")
-    cmake_parse_arguments(arg
-        "${no_value_options}" "${single_value_options}" "${multi_value_options}" ${ARGV}
-    )
-    if(NOT "${arg___QT_INTERNAL_OUTPUT_MOC_JSON_FILES}" STREQUAL "")
-        set(${arg___QT_INTERNAL_OUTPUT_MOC_JSON_FILES}
-            "${${arg___QT_INTERNAL_OUTPUT_MOC_JSON_FILES}}" PARENT_SCOPE)
-    endif()
-endfunction()
-
-# _qt_internal_wrap_cpp(outfiles inputfile ... )
-
-function(_qt_internal_wrap_cpp outfiles)
-    # get include dirs
-    _qt_internal_get_moc_flags(moc_flags)
-
-    set(options)
-    set(oneValueArgs
-        TARGET
-        __QT_INTERNAL_OUTPUT_MOC_JSON_FILES
-    )
-    set(multiValueArgs OPTIONS DEPENDS)
-
-    cmake_parse_arguments(_WRAP_CPP "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
-
-    set(moc_files ${_WRAP_CPP_UNPARSED_ARGUMENTS})
-    set(moc_options ${_WRAP_CPP_OPTIONS})
-    set(moc_target ${_WRAP_CPP_TARGET})
-    set(moc_depends ${_WRAP_CPP_DEPENDS})
-
-    set(metatypes_json_list "")
-
-    foreach(it ${moc_files})
-        get_filename_component(it ${it} ABSOLUTE)
-        get_filename_component(it_ext ${it} EXT)
-        # remove the dot
-        string(SUBSTRING ${it_ext} 1 -1 it_ext)
-        set(HEADER_REGEX "(h|hh|h\\+\\+|hm|hpp|hxx|in|txx|inl)$")
-
-        if(it_ext MATCHES "${HEADER_REGEX}")
-            _qt_internal_make_output_file("${it}" moc_ cpp outfile)
-            set(is_header_file TRUE)
-        else()
-            set(found_source_extension FALSE)
-            foreach(LANG C CXX OBJC OBJCXX CUDA)
-                list(FIND CMAKE_${LANG}_SOURCE_FILE_EXTENSIONS "${it_ext}"
-                    index)
-                if(${index} GREATER -1)
-                    set(found_extension TRUE)
-                    break()
-                endif()
-            endforeach()
-            if(found_extension)
-                if(TARGET ${moc_target})
-                    _qt_internal_make_output_file(${it} "" moc outfile)
-                    target_sources(${moc_target} PRIVATE "${outfile}")
-                    target_include_directories("${moc_target}" PRIVATE
-                        "${CMAKE_CURRENT_BINARY_DIR}")
-                else()
-                    if("${moc_target}" STREQUAL "")
-                        string(JOIN "" err_msg
-                            "qt6_wrap_cpp: TARGET parameter is empty. "
-                            "Since the file ${it} is a source file, "
-                            "the TARGET option must be specified.")
-                    else()
-                        string(JOIN "" err_msg
-                            "qt6_wrap_cpp: TARGET \"${moc_target}\" "
-                            "not found.")
-                    endif()
-                    message(FATAL_ERROR "${err_msg}")
-                endif()
-            else()
-                string(JOIN "" err_msg "qt6_wrap_cpp: Unknown file extension: "
-                    "\"\.${it_ext}\".")
-                message(FATAL_ERROR "${err_msg}")
-            endif()
-        endif()
-
-        set(out_json_file_var "")
-        if(_WRAP_CPP___QT_INTERNAL_OUTPUT_MOC_JSON_FILES)
-            set(out_json_file_var "out_json_file")
-        endif()
-
-        _qt_internal_create_moc_command(
-            ${it} ${outfile} "${moc_flags}" "${moc_options}" "${moc_target}" "${moc_depends}"
-            "${out_json_file_var}")
-        list(APPEND ${outfiles} ${outfile})
-        if(_WRAP_CPP___QT_INTERNAL_OUTPUT_MOC_JSON_FILES)
-            list(APPEND metatypes_json_list "${${out_json_file_var}}")
-        endif()
-    endforeach()
-
-    if(is_header_file)
-        set(${outfiles} "${${outfiles}}" PARENT_SCOPE)
-    endif()
-
-    if(metatypes_json_list)
-        set(${_WRAP_CPP___QT_INTERNAL_OUTPUT_MOC_JSON_FILES}
-            "${metatypes_json_list}" PARENT_SCOPE)
-    endif()
-endfunction()
-
-# This will override the CMake upstream command, because that one is for Qt 3.
-if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    function(qt_wrap_cpp outfiles)
-        if(QT_DEFAULT_MAJOR_VERSION EQUAL 5)
-            qt5_wrap_cpp("${outfiles}" ${ARGN})
-        elseif(QT_DEFAULT_MAJOR_VERSION EQUAL 6)
-            qt6_wrap_cpp("${outfiles}" ${ARGN})
-        endif()
-        set("${outfiles}" "${${outfiles}}" PARENT_SCOPE)
-    endfunction()
-endif()
+set_property(GLOBAL PROPERTY __qt56_core_macros_module_base_dir "${CMAKE_CURRENT_LIST_DIR}")
 
 
-# _qt6_parse_qrc_file(infile _out_depends _rc_depends)
-# internal
+# qt56_add_big_resources(outfiles inputfile ... )
 
-function(_qt6_parse_qrc_file infile _out_depends _rc_depends)
-    get_filename_component(rc_path ${infile} PATH)
-
-    if(EXISTS "${infile}")
-        #  parse file for dependencies
-        #  all files are absolute paths or relative to the location of the qrc file
-        file(READ "${infile}" RC_FILE_CONTENTS)
-        string(REGEX MATCHALL "<file[^<]+" RC_FILES "${RC_FILE_CONTENTS}")
-        foreach(RC_FILE ${RC_FILES})
-            string(REGEX REPLACE "^<file[^>]*>" "" RC_FILE "${RC_FILE}")
-            if(NOT IS_ABSOLUTE "${RC_FILE}")
-                set(RC_FILE "${rc_path}/${RC_FILE}")
-            endif()
-            set(RC_DEPENDS ${RC_DEPENDS} "${RC_FILE}")
-        endforeach()
-        # Since this cmake macro is doing the dependency scanning for these files,
-        # let's make a configured file and add it as a dependency so cmake is run
-        # again when dependencies need to be recomputed.
-        _qt_internal_make_output_file("${infile}" "" "qrc.depends" out_depends)
-        configure_file("${infile}" "${out_depends}" COPYONLY)
-    else()
-        # The .qrc file does not exist (yet). Let's add a dependency and hope
-        # that it will be generated later
-        set(out_depends)
-    endif()
-
-    set(${_out_depends} ${out_depends} PARENT_SCOPE)
-    set(${_rc_depends} ${RC_DEPENDS} PARENT_SCOPE)
-endfunction()
-
-
-# qt6_add_binary_resources(target inputfiles ... )
-
-function(qt6_add_binary_resources target )
-
-    set(options)
-    set(oneValueArgs DESTINATION)
-    set(multiValueArgs OPTIONS)
-
-    cmake_parse_arguments(_RCC "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
-
-    set(rcc_files ${_RCC_UNPARSED_ARGUMENTS})
-    set(rcc_options ${_RCC_OPTIONS})
-    set(rcc_destination ${_RCC_DESTINATION})
-
-    if(NOT QT_FEATURE_zstd)
-        list(APPEND rcc_options "--no-zstd")
-    endif()
-
-    if(NOT rcc_destination)
-        set(rcc_destination ${CMAKE_CURRENT_BINARY_DIR}/${target}.rcc)
-    endif()
-
-    foreach(it ${rcc_files})
-        get_filename_component(infile ${it} ABSOLUTE)
-
-        _qt6_parse_qrc_file(${infile} _out_depends _rc_depends)
-        set_source_files_properties(${infile} PROPERTIES SKIP_AUTORCC ON)
-        set(infiles ${infiles} ${infile})
-        set(out_depends ${out_depends} ${_out_depends})
-        set(rc_depends ${rc_depends} ${_rc_depends})
-    endforeach()
-
-    add_custom_command(OUTPUT ${rcc_destination}
-                       DEPENDS ${QT_CMAKE_EXPORT_NAMESPACE}::rcc
-                       COMMAND ${QT_CMAKE_EXPORT_NAMESPACE}::rcc
-                       ARGS ${rcc_options} --binary --name ${target} --output ${rcc_destination} ${infiles}
-                       DEPENDS
-                            ${QT_CMAKE_EXPORT_NAMESPACE}::rcc
-                            ${rc_depends}
-                            ${out_depends}
-                            ${infiles}
-                       VERBATIM)
-
-    add_custom_target(${target} ALL DEPENDS ${rcc_destination})
-endfunction()
-
-if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    function(qt_add_binary_resources)
-        if(QT_DEFAULT_MAJOR_VERSION EQUAL 5)
-            qt5_add_binary_resources(${ARGV})
-        elseif(QT_DEFAULT_MAJOR_VERSION EQUAL 6)
-            qt6_add_binary_resources(${ARGV})
-        endif()
-    endfunction()
-endif()
-
-
-# qt6_add_resources(target resourcename ...
-# or
-# qt6_add_resources(outfiles inputfile ... )
-
-function(qt6_add_resources outfiles )
-    if (TARGET ${outfiles})
-        cmake_parse_arguments(arg "" "OUTPUT_TARGETS" "" ${ARGN})
-        _qt_internal_process_resource(${ARGV})
-        if (arg_OUTPUT_TARGETS)
-            set(${arg_OUTPUT_TARGETS} ${${arg_OUTPUT_TARGETS}} PARENT_SCOPE)
-        endif()
-    else()
-        set(options)
-        set(oneValueArgs)
-        set(multiValueArgs OPTIONS)
-
-        cmake_parse_arguments(_RCC "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
-
-        set(rcc_files ${_RCC_UNPARSED_ARGUMENTS})
-        set(rcc_options ${_RCC_OPTIONS})
-
-        if("${rcc_options}" MATCHES "-binary")
-            message(WARNING "Use qt6_add_binary_resources for binary option")
-        endif()
-
-        if(NOT QT_FEATURE_zstd)
-            list(APPEND rcc_options "--no-zstd")
-        endif()
-
-        foreach(it ${rcc_files})
-            get_filename_component(outfilename ${it} NAME_WE)
-            get_filename_component(infile ${it} ABSOLUTE)
-            set(outfile ${CMAKE_CURRENT_BINARY_DIR}/qrc_${outfilename}.cpp)
-
-            _qt6_parse_qrc_file(${infile} _out_depends _rc_depends)
-            set_source_files_properties(${infile} PROPERTIES SKIP_AUTORCC ON)
-
-            add_custom_command(OUTPUT ${outfile}
-                               COMMAND ${QT_CMAKE_EXPORT_NAMESPACE}::rcc
-                               ARGS ${rcc_options} --name ${outfilename} --output ${outfile} ${infile}
-                               MAIN_DEPENDENCY ${infile}
-                               DEPENDS ${_rc_depends} "${_out_depends}" ${QT_CMAKE_EXPORT_NAMESPACE}::rcc
-                               VERBATIM)
-            set_source_files_properties(${outfile} PROPERTIES SKIP_AUTOMOC ON
-                                                              SKIP_AUTOUIC ON
-                                                              SKIP_UNITY_BUILD_INCLUSION ON
-                                                              SKIP_PRECOMPILE_HEADERS ON
-                                                              )
-            list(APPEND ${outfiles} ${outfile})
-        endforeach()
-        set(${outfiles} ${${outfiles}} PARENT_SCOPE)
-    endif()
-endfunction()
-
-if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    function(qt_add_resources outfiles)
-        if(QT_DEFAULT_MAJOR_VERSION EQUAL 5)
-            qt5_add_resources("${outfiles}" ${ARGN})
-        elseif(QT_DEFAULT_MAJOR_VERSION EQUAL 6)
-            qt6_add_resources("${outfiles}" ${ARGN})
-        endif()
-        if(TARGET ${outfiles})
-            cmake_parse_arguments(PARSE_ARGV 1 arg "" "OUTPUT_TARGETS" "")
-            if (arg_OUTPUT_TARGETS)
-                set(${arg_OUTPUT_TARGETS} ${${arg_OUTPUT_TARGETS}} PARENT_SCOPE)
-            endif()
-        else()
-            set("${outfiles}" "${${outfiles}}" PARENT_SCOPE)
-        endif()
-    endfunction()
-endif()
-
-
-# qt6_add_big_resources(outfiles inputfile ... )
-
-function(qt6_add_big_resources outfiles )
+function(qt56_add_big_resources outfiles )
     if(CMAKE_GENERATOR STREQUAL "Xcode" AND IOS)
         message(WARNING
-            "Due to CMake limitations, qt6_add_big_resources can't be used when building for iOS. "
+            "Due to CMake limitations, qt56_add_big_resources can't be used when building for iOS. "
             "See https://bugreports.qt.io/browse/QTBUG-103497 for details. "
-            "Falling back to using qt6_add_resources. "
-            "Consider using qt6_add_resources directly to silence this warning."
+            "Falling back to using qt56_add_resources. "
+            "Consider using qt56_add_resources directly to silence this warning."
         )
-        qt6_add_resources(${ARGV})
+        qt56_add_resources(${ARGV})
         set(${outfiles} ${${outfiles}} PARENT_SCOPE)
         return()
     endif()
 
     if (CMAKE_VERSION VERSION_LESS 3.9)
-        message(FATAL_ERROR, "qt6_add_big_resources requires CMake 3.9 or newer")
+        message(FATAL_ERROR, "qt56_add_big_resources requires CMake 3.9 or newer")
     endif()
 
     set(options)
@@ -498,7 +42,7 @@ function(qt6_add_big_resources outfiles )
     set(rcc_options ${_RCC_OPTIONS})
 
     if("${rcc_options}" MATCHES "-binary")
-        message(WARNING "Use qt6_add_binary_resources for binary option")
+        message(WARNING "Use qt56_add_binary_resources for binary option")
     endif()
 
     if(NOT QT_FEATURE_zstd)
@@ -510,7 +54,7 @@ function(qt6_add_big_resources outfiles )
 
         # Provide unique targets and output file names
         # in case we add multiple .qrc files with the same base name.
-        string(MAKE_C_IDENTIFIER "_qt_big_resource_count_${outfilename}" prop)
+        string(MAKE_C_IDENTIFIER "_qt56_big_resource_count_${outfilename}" prop)
         get_property(count GLOBAL PROPERTY ${prop})
         if(count)
             string(APPEND outfilename "_${count}")
@@ -524,7 +68,7 @@ function(qt6_add_big_resources outfiles )
         set(tmpoutfile ${CMAKE_CURRENT_BINARY_DIR}/qrc_${outfilename}tmp.cpp)
         set(outfile ${CMAKE_CURRENT_BINARY_DIR}/qrc_${outfilename}.o)
 
-        _qt6_parse_qrc_file(${infile} _out_depends _rc_depends)
+        _qt56_parse_qrc_file(${infile} _out_depends _rc_depends)
         set_source_files_properties(${infile} PROPERTIES SKIP_AUTOGEN ON)
         if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.27")
             set_source_files_properties(${tmpoutfile} PROPERTIES SKIP_LINTING ON)
@@ -535,7 +79,7 @@ function(qt6_add_big_resources outfiles )
                            COMMENT "Running rcc pass 1 for resource ${outfilename}"
                            VERBATIM)
         add_custom_target(big_resources_${outfilename} ALL DEPENDS ${tmpoutfile})
-        _qt_internal_add_rcc_pass2(
+        _qt56_internal_add_rcc_pass2(
             RESOURCE_NAME ${outfilename}
             RCC_OPTIONS ${rcc_options}
             OBJECT_LIB rcc_object_${outfilename}
@@ -549,7 +93,7 @@ function(qt6_add_big_resources outfiles )
     set(${outfiles} ${${outfiles}} PARENT_SCOPE)
 endfunction()
 
-function(_qt_internal_add_rcc_pass2)
+function(_qt56_internal_add_rcc_pass2)
     set(options)
     set(oneValueArgs
         RESOURCE_NAME
@@ -564,7 +108,7 @@ function(_qt_internal_add_rcc_pass2)
     cmake_parse_arguments(arg "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
     add_library(${arg_OBJECT_LIB} OBJECT ${arg_PASS1_OUTPUT_FILE})
-    _qt_internal_set_up_static_runtime_library(${arg_OBJECT_LIB})
+    _qt56_internal_set_up_static_runtime_library(${arg_OBJECT_LIB})
     target_compile_definitions(${arg_OBJECT_LIB} PUBLIC
         "$<TARGET_PROPERTY:Qt6::Core,INTERFACE_COMPILE_DEFINITIONS>")
     set_target_properties(${arg_OBJECT_LIB} PROPERTIES
@@ -589,13 +133,13 @@ if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
         if(QT_DEFAULT_MAJOR_VERSION EQUAL 5)
             qt5_add_big_resources(${outfiles} ${ARGN})
         elseif(QT_DEFAULT_MAJOR_VERSION EQUAL 6)
-            qt6_add_big_resources(${outfiles} ${ARGN})
+            qt56_add_big_resources(${outfiles} ${ARGN})
         endif()
         set("${outfiles}" "${${outfiles}}" PARENT_SCOPE)
     endfunction()
 endif()
 
-function(_qt_internal_apply_win_prefix_and_suffix target)
+function(_qt56_internal_apply_win_prefix_and_suffix target)
     if(WIN32)
         # Table of prefix / suffixes for MSVC libraries as qmake expects them to be created.
         # static - Qt6EdidSupport.lib (platform support libraries / or static QtCore, etc)
@@ -638,27 +182,27 @@ set(_Qt6_COMPONENT_PATH "${CMAKE_CURRENT_LIST_DIR}/..")
 # Some scenarios require steps to be deferred to the end of the current
 # directory scope so that the caller has an opportunity to modify certain
 # target properties.
-function(qt6_add_executable target)
+function(qt56_add_executable target)
     cmake_parse_arguments(PARSE_ARGV 1 arg "MANUAL_FINALIZATION" "" "")
 
-    _qt_internal_warn_about_example_add_subdirectory()
+    _qt56_internal_warn_about_example_add_subdirectory()
 
-    _qt_internal_create_executable("${target}" ${arg_UNPARSED_ARGUMENTS})
+    _qt56_internal_create_executable("${target}" ${arg_UNPARSED_ARGUMENTS})
     target_link_libraries("${target}" PRIVATE Qt6::Core)
-    set_property(TARGET ${target} PROPERTY _qt_expects_finalization TRUE)
+    set_property(TARGET ${target} PROPERTY _qt56_expects_finalization TRUE)
 
     if(arg_MANUAL_FINALIZATION)
-        # Caller says they will call qt6_finalize_target() themselves later
+        # Caller says they will call qt56_finalize_target() themselves later
         return()
     endif()
 
-    _qt_internal_finalize_target_defer("${target}")
+    _qt56_internal_finalize_target_defer("${target}")
 endfunction()
 
 # Just like for qt_add_resources, we should disable zstd compression when cross-compiling to a
 # target that doesn't support zstd decompression, even if the host tool supports it.
 # Allow an opt out via a QT_NO_AUTORCC_ZSTD variable.
-function(_qt_internal_disable_autorcc_zstd_when_not_supported target)
+function(_qt56_internal_disable_autorcc_zstd_when_not_supported target)
     if(TARGET "${target}"
             AND DEFINED QT_FEATURE_zstd
             AND NOT QT_FEATURE_zstd
@@ -670,11 +214,11 @@ function(_qt_internal_disable_autorcc_zstd_when_not_supported target)
     endif()
 endfunction()
 
-function(_qt_internal_create_executable target)
+function(_qt56_internal_create_executable target)
     if(ANDROID)
         list(REMOVE_ITEM ARGN "WIN32" "MACOSX_BUNDLE")
         cmake_policy(PUSH)
-        __qt_internal_set_cmp0156()
+        __qt56_internal_set_cmp0156()
         add_library("${target}" MODULE ${ARGN})
         cmake_policy(POP)
         # On our qmake builds we do don't compile the executables with
@@ -686,21 +230,21 @@ function(_qt_internal_create_executable target)
         set_property(TARGET "${target}" PROPERTY OBJC_VISIBILITY_PRESET default)
         set_property(TARGET "${target}" PROPERTY OBJCXX_VISIBILITY_PRESET default)
         set_property(TARGET "${target}"
-                     PROPERTY _qt_android_apply_arch_suffix_called_from_qt_impl TRUE)
-        qt6_android_apply_arch_suffix("${target}")
-        set_property(TARGET "${target}" PROPERTY _qt_is_android_executable TRUE)
+                     PROPERTY _qt56_android_apply_arch_suffix_called_from_qt56_impl TRUE)
+        qt56_android_apply_arch_suffix("${target}")
+        set_property(TARGET "${target}" PROPERTY _qt56_is_android_executable TRUE)
     else()
         cmake_policy(PUSH)
-        __qt_internal_set_cmp0156()
+        __qt56_internal_set_cmp0156()
         add_executable("${target}" ${ARGN})
         cmake_policy(POP)
     endif()
 
-    _qt_internal_disable_autorcc_zstd_when_not_supported("${target}")
-    _qt_internal_set_up_static_runtime_library("${target}")
+    _qt56_internal_disable_autorcc_zstd_when_not_supported("${target}")
+    _qt56_internal_set_up_static_runtime_library("${target}")
 endfunction()
 
-function(_qt_internal_finalize_executable target)
+function(_qt56_internal_finalize_executable target)
     # We can't evaluate generator expressions at configure time, so we can't
     # ask for any transitive properties or even the full library dependency
     # chain.
@@ -715,7 +259,7 @@ function(_qt_internal_finalize_executable target)
     # relying on these automatic finalization calls.
     set(finalizers)
 
-    __qt_internal_collect_all_target_dependencies("${target}" dep_targets)
+    __qt56_internal_collect_all_target_dependencies("${target}" dep_targets)
 
     if(dep_targets)
         foreach(dep IN LISTS dep_targets)
@@ -748,15 +292,15 @@ function(_qt_internal_finalize_executable target)
     endif()
 
     if(EMSCRIPTEN)
-        _qt_internal_finalize_wasm_app("${target}")
+        _qt56_internal_finalize_wasm_app("${target}")
     endif()
 
     if(APPLE)
         if(NOT CMAKE_SYSTEM_NAME OR CMAKE_SYSTEM_NAME STREQUAL "Darwin")
             # macOS
-            _qt_internal_finalize_macos_app("${target}")
+            _qt56_internal_finalize_macos_app("${target}")
         else()
-            _qt_internal_finalize_uikit_app("${target}")
+            _qt56_internal_finalize_uikit_app("${target}")
         endif()
     endif()
 
@@ -765,21 +309,21 @@ function(_qt_internal_finalize_executable target)
     # Most of our examples are like that. Only enable finalizer mode when we are sure that the user
     # manually called qt_finalize_target at the end of their CMake project, or it was automatically
     # done via a deferred call. This is also applicable to the resource object finalizer.
-    get_target_property(is_immediately_finalized "${target}" _qt_is_immediately_finalized)
+    get_target_property(is_immediately_finalized "${target}" _qt56_is_immediately_finalized)
     if(NOT is_immediately_finalized)
-        __qt_internal_apply_plugin_imports_finalizer_mode("${target}")
-        __qt_internal_process_dependency_object_libraries("${target}")
+        __qt56_internal_apply_plugin_imports_finalizer_mode("${target}")
+        __qt56_internal_process_dependency_object_libraries("${target}")
     endif()
 endfunction()
 
 # If a task needs to run before any targets are finalized in the current directory
 # scope, call this function and pass the ID of that task as the argument.
-function(_qt_internal_delay_finalization_until_after defer_id)
+function(_qt56_internal_delay_finalization_until_after defer_id)
     set_property(DIRECTORY APPEND PROPERTY qt_internal_finalizers_wait_for_ids "${defer_id}")
 endfunction()
 
-function(qt6_finalize_target target)
-    set_property(TARGET ${target} PROPERTY _qt_expects_finalization FALSE)
+function(qt56_finalize_target target)
+    set_property(TARGET ${target} PROPERTY _qt56_expects_finalization FALSE)
     if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.19")
         cmake_language(DEFER GET_CALL_IDS ids_queued)
         get_directory_property(wait_for_ids qt_internal_finalizers_wait_for_ids)
@@ -805,22 +349,22 @@ function(qt6_finalize_target target)
         message(FATAL_ERROR "No target '${target}' found in current scope.")
     endif()
 
-    get_target_property(is_finalized "${target}" _qt_is_finalized)
+    get_target_property(is_finalized "${target}" _qt56_is_finalized)
     if(is_finalized)
         message(AUTHOR_WARNING
-            "Tried to call qt6_finalize_target twice on target '${target}'. "
-            "Did you forget to specify MANUAL_FINALIZATION to qt6_add_executable, "
-            "qt6_add_library or qt6_add_plugin?")
+            "Tried to call qt56_finalize_target twice on target '${target}'. "
+            "Did you forget to specify MANUAL_FINALIZATION to qt56_add_executable, "
+            "qt56_add_library or qt56_add_plugin?")
         return()
     endif()
 
-    _qt_internal_expose_deferred_files_to_ide(${target})
-    _qt_internal_finalize_source_groups(${target})
+    _qt56_internal_expose_deferred_files_to_ide(${target})
+    _qt56_internal_finalize_source_groups(${target})
     get_target_property(target_type ${target} TYPE)
-    get_target_property(is_android_executable "${target}" _qt_is_android_executable)
+    get_target_property(is_android_executable "${target}" _qt56_is_android_executable)
 
     if(target_type STREQUAL "EXECUTABLE" OR is_android_executable)
-        _qt_internal_finalize_executable(${ARGV})
+        _qt56_internal_finalize_executable(${ARGV})
     endif()
 
     if(APPLE)
@@ -841,33 +385,33 @@ function(qt6_finalize_target target)
         target_type STREQUAL "STATIC_LIBRARY" OR
         target_type STREQUAL "MODULE_LIBRARY" OR
         target_type STREQUAL "OBJECT_LIBRARY")
-        get_target_property(is_immediately_finalized "${target}" _qt_is_immediately_finalized)
+        get_target_property(is_immediately_finalized "${target}" _qt56_is_immediately_finalized)
         get_target_property(uses_automoc ${target} AUTOMOC)
         if(uses_automoc AND NOT is_immediately_finalized)
-            qt6_extract_metatypes(${target})
+            qt56_extract_metatypes(${target})
         endif()
     endif()
 
-    set_target_properties(${target} PROPERTIES _qt_is_finalized TRUE)
+    set_target_properties(${target} PROPERTIES _qt56_is_finalized TRUE)
 endfunction()
 
-function(_qt_internal_finalize_target_defer target)
+function(_qt56_internal_finalize_target_defer target)
     # Defer the finalization if we can. When the caller's project requires
     # CMake 3.19 or later, this makes the calls to this function concise while
     # still allowing target property modification before finalization.
     if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.19)
         # Need to wrap in an EVAL CODE or else ${target} won't be evaluated
         # due to special behavior of cmake_language() argument handling
-        cmake_language(EVAL CODE "cmake_language(DEFER CALL qt6_finalize_target ${target})")
+        cmake_language(EVAL CODE "cmake_language(DEFER CALL qt56_finalize_target ${target})")
     elseif(QT_BUILDING_QT AND QT_INTERNAL_USE_POOR_MANS_SCOPE_FINALIZER)
-        qt_add_list_file_finalizer(qt6_finalize_target "${target}")
+        qt_add_list_file_finalizer(qt56_finalize_target "${target}")
     else()
-        set_target_properties("${target}" PROPERTIES _qt_is_immediately_finalized TRUE)
-        qt6_finalize_target("${target}")
+        set_target_properties("${target}" PROPERTIES _qt56_is_immediately_finalized TRUE)
+        qt56_finalize_target("${target}")
     endif()
 endfunction()
 
-function(_qt_internal_finalize_source_groups target)
+function(_qt56_internal_finalize_source_groups target)
     if(NOT ("${CMAKE_GENERATOR}" STREQUAL "Xcode"
          OR "${CMAKE_GENERATOR}" MATCHES "^Visual Studio"))
         return()
@@ -916,7 +460,7 @@ function(_qt_internal_finalize_source_groups target)
     endforeach()
 endfunction()
 
-function(_qt_internal_darwin_permission_finalizer target)
+function(_qt56_internal_darwin_permission_finalizer target)
     get_target_property(plist_file "${target}" MACOSX_BUNDLE_INFO_PLIST)
     if(NOT plist_file)
         return()
@@ -925,7 +469,7 @@ function(_qt_internal_darwin_permission_finalizer target)
         set(versioned_plugin_target "${QT_CMAKE_EXPORT_NAMESPACE}::${plugin_target}")
         get_target_property(usage_descriptions
             ${versioned_plugin_target}
-            _qt_info_plist_usage_descriptions)
+            _qt56_info_plist_usage_descriptions)
         foreach(usage_description_key IN LISTS usage_descriptions)
             execute_process(COMMAND "/usr/libexec/PlistBuddy"
                 -c "print ${usage_description_key}" "${plist_file}"
@@ -933,8 +477,8 @@ function(_qt_internal_darwin_permission_finalizer target)
                 ERROR_VARIABLE plist_error)
             if(usage_description AND NOT plist_error)
                 set_target_properties("${target}"
-                    PROPERTIES "_qt_has_${plugin_target}_usage_description" TRUE)
-                qt6_import_plugins(${target} INCLUDE ${versioned_plugin_target})
+                    PROPERTIES "_qt56_has_${plugin_target}_usage_description" TRUE)
+                qt56_import_plugins(${target} INCLUDE ${versioned_plugin_target})
             endif()
         endforeach()
     endforeach()
@@ -942,19 +486,19 @@ endfunction()
 
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
     function(qt_add_executable)
-        qt6_add_executable(${ARGV})
+        qt56_add_executable(${ARGV})
     endfunction()
     function(qt_finalize_target)
-        qt6_finalize_target(${ARGV})
+        qt56_finalize_target(${ARGV})
     endfunction()
 
     # Kept for compatibility with Qt Creator 4.15 wizards
     function(qt_finalize_executable)
-        qt6_finalize_target(${ARGV})
+        qt56_finalize_target(${ARGV})
     endfunction()
 endif()
 
-function(_qt_get_plugin_name_with_version target out_var)
+function(_qt56_get_plugin_name_with_version target out_var)
     string(REGEX REPLACE "^Qt::(.+)" "Qt${QT_DEFAULT_MAJOR_VERSION}::\\1"
            qt_plugin_with_version "${target}")
     if(TARGET "${qt_plugin_with_version}")
@@ -964,12 +508,12 @@ function(_qt_get_plugin_name_with_version target out_var)
     endif()
 endfunction()
 
-macro(_qt_import_plugin target plugin)
+macro(_qt56_import_plugin target plugin)
     set(_final_plugin_name "${plugin}")
     if(NOT TARGET "${plugin}")
-        _qt_get_plugin_name_with_version("${plugin}" _qt_plugin_with_version_name)
-        if(TARGET "${_qt_plugin_with_version_name}")
-            set(_final_plugin_name "${_qt_plugin_with_version_name}")
+        _qt56_get_plugin_name_with_version("${plugin}" _qt56_plugin_with_version_name)
+        if(TARGET "${_qt56_plugin_with_version_name}")
+            set(_final_plugin_name "${_qt56_plugin_with_version_name}")
         endif()
     endif()
 
@@ -984,21 +528,21 @@ macro(_qt_import_plugin target plugin)
     endif()
 endmacro()
 
-function(_qt_internal_disable_static_default_plugins target)
+function(_qt56_internal_disable_static_default_plugins target)
     set_target_properties(${target} PROPERTIES QT_DEFAULT_PLUGINS 0)
 endfunction()
 
-function(qt6_import_plugins target)
+function(qt56_import_plugins target)
     cmake_parse_arguments(arg "NO_DEFAULT" "" "INCLUDE;EXCLUDE;INCLUDE_BY_TYPE;EXCLUDE_BY_TYPE" ${ARGN})
 
     # Handle NO_DEFAULT
     if(${arg_NO_DEFAULT})
-        _qt_internal_disable_static_default_plugins("${target}")
+        _qt56_internal_disable_static_default_plugins("${target}")
     endif()
 
     # Handle INCLUDE
     foreach(plugin ${arg_INCLUDE})
-        _qt_import_plugin("${target}" "${plugin}")
+        _qt56_import_plugin("${target}" "${plugin}")
     endforeach()
 
     # Handle EXCLUDE
@@ -1022,8 +566,8 @@ function(qt6_import_plugins target)
             # Check if passed plugin target name is a version-less one, and make a version-full
             # one.
             set_property(TARGET "${target}" APPEND PROPERTY "QT_PLUGINS_${_current_type}" "${_arg}")
-            set_property(TARGET "${target}" APPEND PROPERTY "_qt_plugins_by_type" "${_arg}")
-            _qt_get_plugin_name_with_version("${_arg}" qt_plugin_with_version)
+            set_property(TARGET "${target}" APPEND PROPERTY "_qt56_plugins_by_type" "${_arg}")
+            _qt56_get_plugin_name_with_version("${_arg}" qt_plugin_with_version)
 
             # TODO: Do we really need this check? We didn't have it in Qt5, and plugin targets
             # wrapped in genexes end up causing warnings, but we explicitly use GENEX_EVAL to
@@ -1046,13 +590,13 @@ if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
         if(QT_DEFAULT_MAJOR_VERSION EQUAL 5)
             qt5_import_plugins(${ARGV})
         elseif(QT_DEFAULT_MAJOR_VERSION EQUAL 6)
-            qt6_import_plugins(${ARGV})
+            qt56_import_plugins(${ARGV})
         endif()
     endfunction()
 endif()
 
 # This function is currently in Technical Preview. It's signature may change or be removed entirely.
-function(qt6_set_finalizer_mode target)
+function(qt56_set_finalizer_mode target)
     cmake_parse_arguments(arg "ENABLE;DISABLE" "" "MODES" ${ARGN})
     if(NOT arg_ENABLE AND NOT arg_DISABLE)
         message(FATAL_ERROR "No option was specified whether to enable or disable the modes.")
@@ -1060,7 +604,7 @@ function(qt6_set_finalizer_mode target)
         message(FATAL_ERROR "Both ENABLE and DISABLE options were specified.")
     endif()
     if(NOT arg_MODES)
-        message(FATAL_ERROR "No modes were specified in qt6_set_finalizer_mode() call.")
+        message(FATAL_ERROR "No modes were specified in qt56_set_finalizer_mode() call.")
     endif()
 
     if(arg_ENABLE)
@@ -1070,24 +614,24 @@ function(qt6_set_finalizer_mode target)
     endif()
 
     foreach(mode ${arg_MODES})
-        __qt_internal_enable_finalizer_mode("${target}" "${mode}" "${value}")
+        __qt56_internal_enable_finalizer_mode("${target}" "${mode}" "${value}")
     endforeach()
 endfunction()
 
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
     function(qt_set_finalizer_mode)
-        qt6_set_finalizer_mode(${ARGV})
+        qt56_set_finalizer_mode(${ARGV})
     endfunction()
 endif()
 
-function(_qt_internal_assign_to_internal_targets_folder target)
+function(_qt56_internal_assign_to_internal_targets_folder target)
     get_property(folder_name GLOBAL PROPERTY QT_TARGETS_FOLDER)
     if(NOT "${folder_name}" STREQUAL "")
         set_property(TARGET ${target} PROPERTY FOLDER "${folder_name}")
     endif()
 endfunction()
 
-function(_qt_internal_get_target_autogen_build_dir target out_var)
+function(_qt56_internal_get_target_autogen_build_dir target out_var)
     get_property(target_autogen_build_dir TARGET ${target} PROPERTY AUTOGEN_BUILD_DIR)
     if(target_autogen_build_dir)
         set(${out_var} "${target_autogen_build_dir}" PARENT_SCOPE)
@@ -1097,7 +641,7 @@ function(_qt_internal_get_target_autogen_build_dir target out_var)
     endif()
 endfunction()
 
-function(_qt_internal_should_install_metatypes target)
+function(_qt56_internal_should_install_metatypes target)
     set(args_option
         INTERNAL_INSTALL
     )
@@ -1124,7 +668,7 @@ function(_qt_internal_should_install_metatypes target)
     set(${arg_OUT_VAR} "${should_install}" PARENT_SCOPE)
 endfunction()
 
-function(_qt_internal_get_metatypes_install_dir internal_install_dir arch_data_dir out_var)
+function(_qt56_internal_get_metatypes_install_dir internal_install_dir arch_data_dir out_var)
     # Automatically fill default install args when not specified.
     if(NOT internal_install_dir)
         # INSTALL_ARCHDATADIR is not set when QtBuildInternals is not loaded
@@ -1146,7 +690,7 @@ endfunction()
 # implementation for the purpose of duplicating a qml module backing library's metatypes in its
 # associated plugin. This is required for qmltyperegistrar to get the full set of foreign types
 # when projects link to the plugin and not the backing library.
-function(_qt_internal_assign_build_metatypes_files_and_properties target)
+function(_qt56_internal_assign_build_metatypes_files_and_properties target)
     get_target_property(existing_meta_types_file ${target} INTERFACE_QT_META_TYPES_BUILD_FILE)
     if (existing_meta_types_file)
         return()
@@ -1193,7 +737,7 @@ function(_qt_internal_assign_build_metatypes_files_and_properties target)
 endfunction()
 
 # Same as above, but with $<INSTALL_INTERFACE>.
-function(_qt_internal_assign_install_metatypes_files_and_properties target)
+function(_qt56_internal_assign_install_metatypes_files_and_properties target)
     get_target_property(existing_meta_types_file ${target} INTERFACE_QT_META_TYPES_INSTALL_FILE)
     if (existing_meta_types_file)
         return()
@@ -1241,7 +785,7 @@ function(_qt_internal_assign_install_metatypes_files_and_properties target)
 endfunction()
 
 
-function(qt6_extract_metatypes target)
+function(qt56_extract_metatypes target)
 
     get_target_property(existing_meta_types_file ${target} INTERFACE_QT_META_TYPES_BUILD_FILE)
     if (existing_meta_types_file)
@@ -1289,7 +833,7 @@ function(qt6_extract_metatypes target)
     set(type_list_file_manual "${target_binary_dir}/meta_types/${target}_json_file_list_manual.txt")
 
     set(target_autogen_build_dir "")
-    _qt_internal_get_target_autogen_build_dir(${target} target_autogen_build_dir)
+    _qt56_internal_get_target_autogen_build_dir(${target} target_autogen_build_dir)
 
     get_target_property(uses_automoc ${target} AUTOMOC)
     set(automoc_args)
@@ -1378,7 +922,7 @@ function(qt6_extract_metatypes target)
                 COMMAND_EXPAND_LISTS
             )
             add_dependencies(${target}_automoc_json_extraction ${target}_autogen)
-            _qt_internal_assign_to_internal_targets_folder(${target}_automoc_json_extraction)
+            _qt56_internal_assign_to_internal_targets_folder(${target}_automoc_json_extraction)
         else()
             set(timestamp_file "${target_autogen_build_dir}/timestamp")
             set(timestamp_file_with_config "${timestamp_file}_$<CONFIG>")
@@ -1436,11 +980,11 @@ function(qt6_extract_metatypes target)
         string(TOLOWER ${target} target_lowercase)
     endif()
 
-    set(metatypes_file_name "qt6${target_lowercase}_metatypes.json")
+    set(metatypes_file_name "qt56${target_lowercase}_metatypes.json")
     set(metatypes_file "${target_binary_dir}/meta_types/${metatypes_file_name}")
     set(metatypes_file_gen "${target_binary_dir}/meta_types/${metatypes_file_name}.gen")
 
-    set(metatypes_dep_file_name "qt6${target_lowercase}_metatypes_dep.txt")
+    set(metatypes_dep_file_name "qt56${target_lowercase}_metatypes_dep.txt")
     set(metatypes_dep_file "${target_binary_dir}/meta_types/${metatypes_dep_file_name}")
 
     # Due to generated source file dependency rules being tied to the directory
@@ -1507,7 +1051,7 @@ function(qt6_extract_metatypes target)
     endif()
 
     # Propagate the build time metatypes file.
-    _qt_internal_assign_build_metatypes_files_and_properties(
+    _qt56_internal_assign_build_metatypes_files_and_properties(
         "${target}"
         METATYPES_FILE_NAME "${metatypes_file_name}"
         METATYPES_FILE_PATH "${metatypes_file}"
@@ -1521,20 +1065,20 @@ function(qt6_extract_metatypes target)
 
     # TODO: Clean up Qt-specific installation not to happen in the public api.
     # Check whether the metatype files should be installed.
-    _qt_internal_should_install_metatypes("${target}"
+    _qt56_internal_should_install_metatypes("${target}"
         ${internal_install_option}
         OUT_VAR should_install
     )
 
     if(should_install)
-        _qt_internal_get_metatypes_install_dir(
+        _qt56_internal_get_metatypes_install_dir(
             "${arg___QT_INTERNAL_INSTALL_DIR}"
             "${INSTALL_ARCHDATADIR}"
             install_dir
         )
 
         # Propagate the install time metatypes file.
-        _qt_internal_assign_install_metatypes_files_and_properties(
+        _qt56_internal_assign_install_metatypes_files_and_properties(
             "${target}"
             INSTALL_DIR "${install_dir}"
         )
@@ -1544,7 +1088,7 @@ endfunction()
 
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
     function(qt_extract_metatypes)
-        qt6_extract_metatypes(${ARGV})
+        qt56_extract_metatypes(${ARGV})
         cmake_parse_arguments(PARSE_ARGV 0 arg "" "OUTPUT_FILES" "")
         if(arg_OUTPUT_FILES)
             set(${arg_OUTPUT_FILES} "${${arg_OUTPUT_FILES}}" PARENT_SCOPE)
@@ -1569,7 +1113,7 @@ endif()
 # If you do not wish to auto-generate rc files, it's possible to provide your
 # own RC file by setting the property QT_TARGET_WINDOWS_RC_FILE with a path to
 # an existing rc file.
-function(_qt_internal_generate_win32_rc_file target)
+function(_qt56_internal_generate_win32_rc_file target)
     set(prohibited_target_types INTERFACE_LIBRARY STATIC_LIBRARY OBJECT_LIBRARY)
     get_target_property(target_type ${target} TYPE)
     if(target_type IN_LIST prohibited_target_types)
@@ -1795,7 +1339,7 @@ endfunction()
 # Generate Win32 longPathAware RC and Manifest files for a target.
 # MSVC needs the manifest file as part of target_sources. MinGW the RC file.
 #
-function(_qt_internal_generate_longpath_win32_rc_file_and_manifest target)
+function(_qt56_internal_generate_longpath_win32_rc_file_and_manifest target)
     set(prohibited_target_types INTERFACE_LIBRARY STATIC_LIBRARY OBJECT_LIBRARY)
     get_target_property(target_type ${target} TYPE)
     if(target_type IN_LIST prohibited_target_types)
@@ -1835,7 +1379,7 @@ function(_qt_internal_generate_longpath_win32_rc_file_and_manifest target)
     endforeach()
 endfunction()
 
-function(__qt_get_relative_resource_path_for_file output_alias file)
+function(__qt56_get_relative_resource_path_for_file output_alias file)
     get_property(alias SOURCE ${file} PROPERTY QT_RESOURCE_ALIAS)
     if (NOT alias)
         set(alias "${file}")
@@ -1860,7 +1404,7 @@ endfunction()
 #   Conditions for the target_link_libraries call.
 # EXTRA_TARGET_SOURCES_CONDITIONS
 #   Conditions for the target_sources call.
-function(__qt_internal_propagate_object_files target objects)
+function(__qt56_internal_propagate_object_files target objects)
     set(options "")
     set(single_args "")
     set(extra_conditions_args
@@ -1888,18 +1432,18 @@ function(__qt_internal_propagate_object_files target objects)
 
     # Check if link order matters for the Platform.
     set(platform_link_order_property
-        "$<TARGET_PROPERTY:${QT_CMAKE_EXPORT_NAMESPACE}::Platform,_qt_link_order_matters>"
+        "$<TARGET_PROPERTY:${QT_CMAKE_EXPORT_NAMESPACE}::Platform,_qt56_link_order_matters>"
     )
     set(platform_link_order_condition
         "$<BOOL:${platform_link_order_property}>"
     )
 
     # Check if link options are propagated according to CMP0099
-    # In user builds the _qt_cmp0099_policy_check is set to FALSE or $<TARGET_POLICY:CMP0099>
+    # In user builds the _qt56_cmp0099_policy_check is set to FALSE or $<TARGET_POLICY:CMP0099>
     # depending on the used CMake version.
-    # See __qt_internal_check_cmp0099_available for details.
+    # See __qt56_internal_check_cmp0099_available for details.
     set(cmp0099_policy_check_property
-        "$<TARGET_PROPERTY:${QT_CMAKE_EXPORT_NAMESPACE}::Platform,_qt_cmp0099_policy_check>"
+        "$<TARGET_PROPERTY:${QT_CMAKE_EXPORT_NAMESPACE}::Platform,_qt56_cmp0099_policy_check>"
     )
     set(link_objects_using_link_options_condition
         "$<BOOL:$<GENEX_EVAL:${cmp0099_policy_check_property}>>"
@@ -1966,7 +1510,7 @@ endfunction()
 #
 # EXTRA_CONDITIONS object library specific conditions to be checked before link the object library
 #   to the end-point executable.
-function(__qt_internal_propagate_object_library target object_library)
+function(__qt56_internal_propagate_object_library target object_library)
     set(options NO_LINK_OBJECT_LIBRARY_REQUIREMENTS_TO_TARGET)
     set(single_args "")
     set(multi_args EXTRA_CONDITIONS)
@@ -1975,36 +1519,36 @@ function(__qt_internal_propagate_object_library target object_library)
     get_target_property(is_imported ${object_library} IMPORTED)
     if(NOT is_imported)
         target_link_libraries(${object_library} PRIVATE ${QT_CMAKE_EXPORT_NAMESPACE}::Platform)
-        _qt_internal_copy_dependency_properties(${object_library} ${target} PRIVATE_ONLY)
+        _qt56_internal_copy_dependency_properties(${object_library} ${target} PRIVATE_ONLY)
     endif()
 
     # After internal discussion we decided to not rely on the linker order that CMake
     # offers, until CMake provides the guaranteed linking order that suites our needs in a
     # future CMake version.
-    # All object libraries mark themselves with the _is_qt_propagated_object_library property.
+    # All object libraries mark themselves with the _is_qt56_propagated_object_library property.
     # Using a finalizer approach we walk through the target dependencies and look for libraries
-    # using the _is_qt_propagated_object_library property. Then, objects of the collected libraries
+    # using the _is_qt56_propagated_object_library property. Then, objects of the collected libraries
     # are moved to the beginning of the linker line using target_sources.
     #
     # Note: target_link_libraries works well with linkers other than ld. If user didn't enforce
     # a finalizer we rely on linker to resolve circular dependencies between objects and static
     # libraries.
-    set_property(TARGET ${object_library} PROPERTY _is_qt_propagated_object_library TRUE)
+    set_property(TARGET ${object_library} PROPERTY _is_qt56_propagated_object_library TRUE)
     if(NOT is_imported)
         set_property(TARGET ${object_library} APPEND PROPERTY
-            EXPORT_PROPERTIES _is_qt_propagated_object_library
+            EXPORT_PROPERTIES _is_qt56_propagated_object_library
         )
     endif()
 
     # Keep the implicit linking if finalizers are not used.
     set(not_finalizer_mode_condition
-        "$<NOT:$<BOOL:$<TARGET_PROPERTY:_qt_object_libraries_finalizer_mode>>>"
+        "$<NOT:$<BOOL:$<TARGET_PROPERTY:_qt56_object_libraries_finalizer_mode>>>"
     )
 
     # Use TARGET_NAME to have the correct namespaced name in the exports.
     set(objects "$<TARGET_OBJECTS:$<TARGET_NAME:${object_library}>>")
 
-    __qt_internal_propagate_object_files(${target} ${objects}
+    __qt56_internal_propagate_object_files(${target} ${objects}
         EXTRA_CONDITIONS ${arg_EXTRA_CONDITIONS}
         EXTRA_TARGET_SOURCES_CONDITIONS ${not_finalizer_mode_condition}
         EXTRA_TARGET_LINK_LIBRARIES_CONDITIONS ${not_finalizer_mode_condition}
@@ -2019,17 +1563,17 @@ function(__qt_internal_propagate_object_library target object_library)
     endif()
 endfunction()
 
-function(__qt_propagate_generated_resource target resource_name generated_source_code output_generated_target)
+function(__qt56_propagate_generated_resource target resource_name generated_source_code output_generated_target)
     get_target_property(type ${target} TYPE)
     if(type STREQUAL STATIC_LIBRARY)
-        get_target_property(resource_count ${target} _qt_generated_resource_target_count)
+        get_target_property(resource_count ${target} _qt56_generated_resource_target_count)
         if(NOT resource_count)
             set(resource_count "0")
         endif()
         math(EXPR resource_count "${resource_count} + 1")
-        set_target_properties(${target} PROPERTIES _qt_generated_resource_target_count ${resource_count})
+        set_target_properties(${target} PROPERTIES _qt56_generated_resource_target_count ${resource_count})
 
-        __qt_internal_generate_init_resource_source_file(
+        __qt56_internal_generate_init_resource_source_file(
             resource_init_file ${target} ${resource_name})
 
         set(resource_target "${target}_resources_${resource_count}")
@@ -2052,7 +1596,7 @@ function(__qt_propagate_generated_resource target resource_name generated_source
         target_include_directories("${resource_target}" PRIVATE
             "$<TARGET_PROPERTY:${QT_CMAKE_EXPORT_NAMESPACE}::Core,INTERFACE_INCLUDE_DIRECTORIES>"
         )
-        _qt_internal_set_up_static_runtime_library("${resource_target}")
+        _qt56_internal_set_up_static_runtime_library("${resource_target}")
 
         # Special handling is required for the Core library resources. The linking of the Core
         # library to the resources adds a circular dependency. This leads to the wrong
@@ -2061,7 +1605,7 @@ function(__qt_propagate_generated_resource target resource_name generated_source
         if(NOT target STREQUAL "Core")
             target_link_libraries(${resource_target} INTERFACE ${QT_CMAKE_EXPORT_NAMESPACE}::Core)
         endif()
-        set_property(TARGET ${resource_target} APPEND PROPERTY _qt_resource_name ${resource_name})
+        set_property(TARGET ${resource_target} APPEND PROPERTY _qt56_resource_name ${resource_name})
 
         # Save the path to the generated source file, relative to the the current build dir.
         # The path will be used in static library prl file generation to ensure qmake links
@@ -2072,12 +1616,12 @@ function(__qt_propagate_generated_resource target resource_name generated_source
             "${CMAKE_CURRENT_BINARY_DIR}"
             "${resource_init_file}")
         set_property(TARGET ${resource_target} APPEND PROPERTY
-            _qt_resource_generated_cpp_relative_path "${generated_cpp_file_relative_path}")
+            _qt56_resource_generated_cpp_relative_path "${generated_cpp_file_relative_path}")
 
         if(target STREQUAL "Core")
             set(skip_direct_linking NO_LINK_OBJECT_LIBRARY_REQUIREMENTS_TO_TARGET)
         endif()
-        __qt_internal_propagate_object_library(${target} ${resource_target}
+        __qt56_internal_propagate_object_library(${target} ${resource_target}
             ${skip_direct_linking}
         )
 
@@ -2089,7 +1633,7 @@ function(__qt_propagate_generated_resource target resource_name generated_source
     target_sources(${target} PRIVATE ${generated_source_code})
 endfunction()
 
-function(__qt_internal_sanitize_resource_name out_var name)
+function(__qt56_internal_sanitize_resource_name out_var name)
     # The sanitized output should match RCCResourceLibrary::writeInitializer()'s
     # isAsciiLetterOrNumber-based substituion.
     # MAKE_C_IDENTIFIER matches that, it replaces non-alphanumeric chars with underscores.
@@ -2097,12 +1641,12 @@ function(__qt_internal_sanitize_resource_name out_var name)
     set(${out_var} "${sanitized_resource_name}" PARENT_SCOPE)
 endfunction()
 
-function(__qt_internal_generate_init_resource_source_file out_var target resource_name)
-    get_property(__qt_core_macros_module_base_dir GLOBAL PROPERTY __qt_core_macros_module_base_dir)
-    set(template_file "${__qt_core_macros_module_base_dir}/Qt6CoreResourceInit.in.cpp")
+function(__qt56_internal_generate_init_resource_source_file out_var target resource_name)
+    get_property(__qt56_core_macros_module_base_dir GLOBAL PROPERTY __qt56_core_macros_module_base_dir)
+    set(template_file "${__qt56_core_macros_module_base_dir}/Qt6CoreResourceInit.in.cpp")
 
     # Gets replaced in the template
-    __qt_internal_sanitize_resource_name(RESOURCE_NAME "${resource_name}")
+    __qt56_internal_sanitize_resource_name(RESOURCE_NAME "${resource_name}")
     set(resource_init_path "${CMAKE_CURRENT_BINARY_DIR}/.qt/rcc/qrc_${resource_name}_init.cpp")
 
     configure_file("${template_file}" "${resource_init_path}" @ONLY)
@@ -2123,18 +1667,18 @@ endfunction()
 # Make file visible in IDEs.
 # Targets that are finalized add the file as HEADER_FILE_ONLY in the finalizer.
 # Targets that are not finalized add the file under a ${target}_other_files target.
-function(_qt_internal_expose_source_file_to_ide target file)
-    get_target_property(target_expects_finalization ${target} _qt_expects_finalization)
+function(_qt56_internal_expose_source_file_to_ide target file)
+    get_target_property(target_expects_finalization ${target} _qt56_expects_finalization)
     if(target_expects_finalization AND CMAKE_VERSION VERSION_GREATER_EQUAL "3.19")
         # The target is not yet finalized. The target finalizer will call the exposure function.
-        set_property(TARGET ${target} APPEND PROPERTY _qt_deferred_files ${file})
+        set_property(TARGET ${target} APPEND PROPERTY _qt56_deferred_files ${file})
         return()
     else()
-        get_target_property(is_finalized "${target}" _qt_is_finalized)
+        get_target_property(is_finalized "${target}" _qt56_is_finalized)
         if(is_finalized)
             # The target already has been finalized. Run the exposure function immediately.
-            set_property(TARGET ${target} APPEND PROPERTY _qt_deferred_files ${file})
-            _qt_internal_expose_deferred_files_to_ide(${target})
+            set_property(TARGET ${target} APPEND PROPERTY _qt56_deferred_files ${file})
+            _qt56_internal_expose_deferred_files_to_ide(${target})
             return()
         endif()
     endif()
@@ -2160,7 +1704,7 @@ function(_qt_internal_expose_source_file_to_ide target file)
         set(scope_args TARGET_DIRECTORY "${target}")
     endif()
     get_source_file_property(
-        target_dependency "${file}" ${scope_args} _qt_resource_target_dependency)
+        target_dependency "${file}" ${scope_args} _qt56_resource_target_dependency)
     if(target_dependency)
         if(NOT TARGET "${target_dependency}")
             message(FATAL_ERROR "Target dependency on source file ${file} is not a cmake target.")
@@ -2170,10 +1714,10 @@ function(_qt_internal_expose_source_file_to_ide target file)
 endfunction()
 
 # Called by the target finalizer.
-# Adds the files that were added to _qt_deferred_files to SOURCES.
+# Adds the files that were added to _qt56_deferred_files to SOURCES.
 # Sets HEADER_FILES_ONLY if they did not exist yet in SOURCES.
-function(_qt_internal_expose_deferred_files_to_ide target)
-    get_target_property(new_sources ${target} _qt_deferred_files)
+function(_qt56_internal_expose_deferred_files_to_ide target)
+    get_target_property(new_sources ${target} _qt56_deferred_files)
     if(NOT new_sources)
         return()
     endif()
@@ -2223,7 +1767,7 @@ endfunction()
 # If SUBSET is given, only the characters in it will be escaped.
 # No validation is done whether the characters in SUBSET are actually
 # characters that need to be replaced
-function(_qt_internal_escape_xml_characters input output_variable)
+function(_qt56_internal_escape_xml_characters input output_variable)
     set(no_value_options "")
     set(single_value_options SUBSET)
     set(multi_value_options "")
@@ -2272,7 +1816,7 @@ endfunction()
 # will be generated. Should you wish to perform additional processing on these
 # targets pass a value to the OUTPUT_TARGETS parameter.
 #
-function(_qt_internal_process_resource target resourceName)
+function(_qt56_internal_process_resource target resourceName)
     cmake_parse_arguments(rcc "BIG_RESOURCES"
         "PREFIX;LANG;BASE;OUTPUT_TARGETS;DESTINATION" "FILES;OPTIONS" ${ARGN})
 
@@ -2329,8 +1873,8 @@ function(_qt_internal_process_resource target resourceName)
     endif()
 
     if(ANDROID)
-        if(COMMAND _qt_internal_collect_qml_root_paths)
-            _qt_internal_collect_qml_root_paths(${target} ${resource_files})
+        if(COMMAND _qt56_internal_collect_qml_root_paths)
+            _qt56_internal_collect_qml_root_paths(${target} ${resource_files})
         endif()
     endif()
 
@@ -2348,14 +1892,14 @@ function(_qt_internal_process_resource target resourceName)
         return()
     endif()
     set(generatedResourceFile "${CMAKE_CURRENT_BINARY_DIR}/.qt/rcc/${resourceName}.qrc")
-    _qt_internal_expose_source_file_to_ide(${target} ${generatedResourceFile})
+    _qt56_internal_expose_source_file_to_ide(${target} ${generatedResourceFile})
     set_source_files_properties(${generatedResourceFile} PROPERTIES GENERATED TRUE)
 
     # Generate .qrc file:
 
     # <RCC><qresource ...>
     set(qrcContents "<RCC>\n  <qresource")
-    _qt_internal_escape_xml_characters("${rcc_PREFIX}" escaped_rcc_PREFIX SUBSET [[&<"]])
+    _qt56_internal_escape_xml_characters("${rcc_PREFIX}" escaped_rcc_PREFIX SUBSET [[&<"]])
 
     string(APPEND qrcContents " prefix=\"${escaped_rcc_PREFIX}\"")
 
@@ -2368,7 +1912,7 @@ function(_qt_internal_process_resource target resourceName)
 
     set(resource_dependencies)
     foreach(file IN LISTS resource_files)
-        __qt_get_relative_resource_path_for_file(file_resource_path ${file})
+        __qt56_get_relative_resource_path_for_file(file_resource_path ${file})
 
         if (NOT IS_ABSOLUTE ${file})
             set(file "${CMAKE_CURRENT_SOURCE_DIR}/${file}")
@@ -2378,12 +1922,12 @@ function(_qt_internal_process_resource target resourceName)
 
         # <file ...>...</file>
         # We need XML escaping; alias is a quote enclosed attribute, file is text
-        _qt_internal_escape_xml_characters(
+        _qt56_internal_escape_xml_characters(
             "${file_resource_path}"
             escaped_file_resource_path
             SUBSET [[&<"]]
         )
-        _qt_internal_escape_xml_characters(
+        _qt56_internal_escape_xml_characters(
             "${file}"
             escaped_file
             SUBSET [[&<]]
@@ -2401,7 +1945,7 @@ function(_qt_internal_process_resource target resourceName)
             set(scope_args TARGET_DIRECTORY ${target})
         endif()
         get_source_file_property(
-            target_dependency ${file} ${scope_args} _qt_resource_target_dependency)
+            target_dependency ${file} ${scope_args} _qt56_resource_target_dependency)
 
         # The target dependency code path does not take care of rebuilds when ${file}
         # is touched. Limit its usage to the Xcode generator to avoid the Xcode common
@@ -2417,14 +1961,14 @@ function(_qt_internal_process_resource target resourceName)
         else()
             list(APPEND resource_dependencies ${file})
         endif()
-        _qt_internal_expose_source_file_to_ide(${target} "${file}")
+        _qt56_internal_expose_source_file_to_ide(${target} "${file}")
     endforeach()
 
     # </qresource></RCC>
     string(APPEND qrcContents "  </qresource>\n</RCC>\n")
 
-    get_property(__qt_core_macros_module_base_dir GLOBAL PROPERTY __qt_core_macros_module_base_dir)
-    set(template_file "${__qt_core_macros_module_base_dir}/Qt6CoreConfigureFileTemplate.in")
+    get_property(__qt56_core_macros_module_base_dir GLOBAL PROPERTY __qt56_core_macros_module_base_dir)
+    set(template_file "${__qt56_core_macros_module_base_dir}/Qt6CoreConfigureFileTemplate.in")
     set(qt_core_configure_file_contents "${qrcContents}")
     configure_file("${template_file}" "${generatedResourceFile}")
 
@@ -2523,7 +2067,7 @@ function(_qt_internal_process_resource target resourceName)
         set(pass1OutputFile ${generatedOutfile})
         set(generatedOutfile
             "${CMAKE_CURRENT_BINARY_DIR}/.qt/rcc/qrc_${resourceName}${CMAKE_CXX_OUTPUT_EXTENSION}")
-        _qt_internal_add_rcc_pass2(
+        _qt56_internal_add_rcc_pass2(
             RESOURCE_NAME ${resourceName}
             RCC_OPTIONS ${rccArgsAllPasses}
             OBJECT_LIB ${target}_${resourceName}_obj
@@ -2539,24 +2083,24 @@ function(_qt_internal_process_resource target resourceName)
             add_dependencies(${target} ${pass2_target})
 
             # Propagate the object files to the target.
-            __qt_internal_propagate_object_files(${target} "${generatedOutfile}")
+            __qt56_internal_propagate_object_files(${target} "${generatedOutfile}")
         else()
             target_sources(${target} PRIVATE ${generatedOutfile})
         endif()
     else()
-        __qt_propagate_generated_resource(${target} ${resourceName} "${generatedOutfile}"
+        __qt56_propagate_generated_resource(${target} ${resourceName} "${generatedOutfile}"
             output_targets)
     endif()
 
     set_property(TARGET ${target}
-        APPEND PROPERTY _qt_generated_qrc_files "${generatedResourceFile}")
+        APPEND PROPERTY _qt56_generated_qrc_files "${generatedResourceFile}")
 
     if (rcc_OUTPUT_TARGETS)
         set(${rcc_OUTPUT_TARGETS} "${output_targets}" PARENT_SCOPE)
     endif()
 endfunction()
 
-macro(_qt_internal_get_add_plugin_keywords option_args single_args multi_args)
+macro(_qt56_internal_get_add_plugin_keywords option_args single_args multi_args)
     set(${option_args}
         STATIC
         SHARED
@@ -2571,8 +2115,8 @@ macro(_qt_internal_get_add_plugin_keywords option_args single_args multi_args)
     set(${multi_args})
 endmacro()
 
-function(qt6_add_plugin target)
-    _qt_internal_get_add_plugin_keywords(opt_args single_args multi_args)
+function(qt56_add_plugin target)
+    _qt56_internal_get_add_plugin_keywords(opt_args single_args multi_args)
     list(APPEND opt_args MANUAL_FINALIZATION)
 
     cmake_parse_arguments(PARSE_ARGV 1 arg "${opt_args}" "${single_args}" "${multi_args}")
@@ -2597,7 +2141,7 @@ function(qt6_add_plugin target)
         endif()
     endif()
 
-    # The default of _qt_internal_add_library creates SHARED in a shared Qt build, so we need to
+    # The default of _qt56_internal_add_library creates SHARED in a shared Qt build, so we need to
     # be explicit about the MODULE.
     if(create_static_plugin)
         set(type_to_create STATIC)
@@ -2605,8 +2149,8 @@ function(qt6_add_plugin target)
         set(type_to_create MODULE)
     endif()
 
-    _qt_internal_add_library(${target} ${type_to_create} ${arg_UNPARSED_ARGUMENTS})
-    set_property(TARGET ${target} PROPERTY _qt_expects_finalization TRUE)
+    _qt56_internal_add_library(${target} ${type_to_create} ${arg_UNPARSED_ARGUMENTS})
+    set_property(TARGET ${target} PROPERTY _qt56_expects_finalization TRUE)
 
     get_target_property(target_type "${target}" TYPE)
     if (target_type STREQUAL "STATIC_LIBRARY")
@@ -2654,7 +2198,7 @@ function(qt6_add_plugin target)
     # Qml plugin inits are handled in Qt6QmlMacros.
     if(NOT "${arg_PLUGIN_TYPE}" STREQUAL "qml_plugin"
             AND target_type STREQUAL "STATIC_LIBRARY")
-        __qt_internal_add_static_plugin_init_object_library("${target}" plugin_init_target)
+        __qt56_internal_add_static_plugin_init_object_library("${target}" plugin_init_target)
 
         if(arg_OUTPUT_TARGETS)
             set(${arg_OUTPUT_TARGETS} ${plugin_init_target} PARENT_SCOPE)
@@ -2664,7 +2208,7 @@ function(qt6_add_plugin target)
         # there are 2 other code paths that take care of that, one involving finalizers and the
         # other regular usage requirements.
         if(NOT arg___QT_INTERNAL_NO_PROPAGATE_PLUGIN_INITIALIZER)
-            __qt_internal_propagate_object_library("${target}" "${plugin_init_target}")
+            __qt56_internal_propagate_object_library("${target}" "${plugin_init_target}")
         endif()
     else()
         if(arg_OUTPUT_TARGETS)
@@ -2680,22 +2224,22 @@ function(qt6_add_plugin target)
     if(target_type STREQUAL "MODULE_LIBRARY")
         if(NOT TARGET qt_internal_plugins)
             add_custom_target(qt_internal_plugins)
-            _qt_internal_assign_to_internal_targets_folder(qt_internal_plugins)
+            _qt56_internal_assign_to_internal_targets_folder(qt_internal_plugins)
         endif()
         add_dependencies(qt_internal_plugins ${target})
     endif()
 
     if(arg_MANUAL_FINALIZATION)
-        # Caller says they will call qt6_finalize_target() themselves later
+        # Caller says they will call qt56_finalize_target() themselves later
         return()
     endif()
 
-    _qt_internal_finalize_target_defer("${target}")
+    _qt56_internal_finalize_target_defer("${target}")
 endfunction()
 
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
     function(qt_add_plugin)
-        qt6_add_plugin(${ARGV})
+        qt56_add_plugin(${ARGV})
         cmake_parse_arguments(PARSE_ARGV 1 arg "" "OUTPUT_TARGETS" "")
         if(arg_OUTPUT_TARGETS)
             set(${arg_OUTPUT_TARGETS} ${${arg_OUTPUT_TARGETS}} PARENT_SCOPE)
@@ -2705,18 +2249,18 @@ endif()
 
 # Creates a library by forwarding arguments to add_library, applies some Qt naming file name naming
 # conventions and ensures the execution of Qt specific finalizers.
-function(qt6_add_library target)
+function(qt56_add_library target)
     cmake_parse_arguments(PARSE_ARGV 1 arg "MANUAL_FINALIZATION" "" "")
 
-    _qt_internal_add_library("${target}" ${arg_UNPARSED_ARGUMENTS})
-    set_property(TARGET ${target} PROPERTY _qt_expects_finalization TRUE)
+    _qt56_internal_add_library("${target}" ${arg_UNPARSED_ARGUMENTS})
+    set_property(TARGET ${target} PROPERTY _qt56_expects_finalization TRUE)
 
     if(arg_MANUAL_FINALIZATION)
-        # Caller says they will call qt6_finalize_target() themselves later
+        # Caller says they will call qt56_finalize_target() themselves later
         return()
     endif()
 
-    _qt_internal_finalize_target_defer("${target}")
+    _qt56_internal_finalize_target_defer("${target}")
 endfunction()
 
 # Creates a library target by forwarding the arguments to add_library.
@@ -2725,7 +2269,7 @@ endfunction()
 # - If no type option is specified, rather than defaulting to STATIC it defaults to STATIC or SHARED
 #   depending on the Qt configuration.
 # - Applies Qt specific prefixes and suffixes to file names depending on platform.
-function(_qt_internal_add_library target)
+function(_qt56_internal_add_library target)
     set(opt_args
         STATIC
         SHARED
@@ -2766,14 +2310,14 @@ function(_qt_internal_add_library target)
     if(NOT arg_STATIC AND NOT arg_SHARED AND NOT arg_MODULE AND NOT arg_INTERFACE
             AND NOT arg_OBJECT)
         if(DEFINED BUILD_SHARED_LIBS AND NOT QT_BUILDING_QT AND NOT QT_BUILD_STANDALONE_TESTS)
-            __qt_internal_setup_policy(QTP0003 "6.7.0"
+            __qt56_internal_setup_policy(QTP0003 "6.7.0"
                 "BUILD_SHARED_LIBS is set to ${BUILD_SHARED_LIBS} but it has no effect on\
                 default library type created by Qt CMake API commands. The default library type\
                 is set to the Qt build type.\
                 This behavior can be changed by setting QTP0003 to NEW.\
                 Check https://doc.qt.io/qt-6/qt-cmake-policy-qtp0003.html for policy details."
             )
-            qt6_policy(GET QTP0003 build_shared_libs_policy)
+            qt56_policy(GET QTP0003 build_shared_libs_policy)
         else()
             set(build_shared_libs_policy "")
         endif()
@@ -2794,15 +2338,15 @@ function(_qt_internal_add_library target)
     endif()
 
     cmake_policy(PUSH)
-    __qt_internal_set_cmp0156()
+    __qt56_internal_set_cmp0156()
     add_library(${target} ${type_to_create} ${arg_UNPARSED_ARGUMENTS})
     cmake_policy(POP)
 
-    _qt_internal_disable_autorcc_zstd_when_not_supported("${target}")
-    _qt_internal_set_up_static_runtime_library(${target})
+    _qt56_internal_disable_autorcc_zstd_when_not_supported("${target}")
+    _qt56_internal_set_up_static_runtime_library(${target})
 
     if(NOT type_to_create STREQUAL "INTERFACE" AND NOT type_to_create STREQUAL "OBJECT")
-        _qt_internal_apply_win_prefix_and_suffix("${target}")
+        _qt56_internal_apply_win_prefix_and_suffix("${target}")
     endif()
 
     if(arg_MODULE AND APPLE)
@@ -2813,39 +2357,39 @@ function(_qt_internal_add_library target)
 
     if(ANDROID)
         set_property(TARGET "${target}"
-                     PROPERTY _qt_android_apply_arch_suffix_called_from_qt_impl TRUE)
-        qt6_android_apply_arch_suffix("${target}")
+                     PROPERTY _qt56_android_apply_arch_suffix_called_from_qt56_impl TRUE)
+        qt56_android_apply_arch_suffix("${target}")
     endif()
 endfunction()
 
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
     function(qt_add_library)
-        qt6_add_library(${ARGV})
+        qt56_add_library(${ARGV})
     endfunction()
 endif()
 
 # TODO: Remove once all repositories use qt_internal_add_example instead of add_subdirectory.
-macro(_qt_internal_override_example_install_dir_to_dot)
+macro(_qt56_internal_override_example_install_dir_to_dot)
     # Set INSTALL_EXAMPLEDIR to ".".
     # This overrides the install destination of unclean Qt example projects to install directly
     # to CMAKE_INSTALL_PREFIX.
     if(QT_INTERNAL_SET_EXAMPLE_INSTALL_DIR_TO_DOT)
         set(INSTALL_EXAMPLEDIR ".")
-        set(_qt_internal_example_dir_set_to_dot TRUE)
+        set(_qt56_internal_example_dir_set_to_dot TRUE)
     endif()
 endmacro()
 
-function(qt6_allow_non_utf8_sources target)
+function(qt56_allow_non_utf8_sources target)
     set_target_properties("${target}" PROPERTIES QT_NO_UTF8_SOURCE TRUE)
 endfunction()
 
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
     function(qt_allow_non_utf8_sources)
-        qt6_allow_non_utf8_sources(${ARGV})
+        qt56_allow_non_utf8_sources(${ARGV})
     endfunction()
 endif()
 
-function(_qt_internal_apply_strict_cpp target)
+function(_qt56_internal_apply_strict_cpp target)
     # Disable C, Obj-C and C++ GNU extensions aka no "-std=gnu++11".
     # Similar to mkspecs/features/default_post.prf's CONFIG += strict_cpp.
     # Allow opt-out via variable.
@@ -2873,11 +2417,11 @@ endfunction()
 #
 # PRIVATE_ONLY and INTERFACE_ONLY in the same call are not allowed. Omit these options to copy
 # both sets.
-function(_qt_internal_copy_dependency_properties target dependency)
+function(_qt56_internal_copy_dependency_properties target dependency)
     cmake_parse_arguments(arg "INTERFACE_ONLY;PRIVATE_ONLY" "" "PROPERTIES" ${ARGN})
     if(arg_PRIVATE_ONLY AND arg_INTERFACE_ONLY)
         message("Both PRIVATE_ONLY and INTERFACE_ONLY options are set.\
-Please use _qt_internal_copy_dependency_properties without these options to copy a set of
+Please use _qt56_internal_copy_dependency_properties without these options to copy a set of
 properties of both types."
         )
     endif()
@@ -2910,7 +2454,7 @@ properties of both types."
     endforeach()
 endfunction()
 
-function(qt6_disable_unicode_defines target)
+function(qt56_disable_unicode_defines target)
     set_target_properties(${target} PROPERTIES QT_NO_UNICODE_DEFINES TRUE)
 endfunction()
 
@@ -2918,34 +2462,34 @@ endfunction()
 #
 # This function is currently in Technical Preview.
 # Its signature and behavior might change.
-function(qt6_finalize_project)
+function(qt56_finalize_project)
     if(NOT CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
-        message("qt6_finalize_project is called not in the top-level CMakeLists.txt.")
+        message("qt56_finalize_project is called not in the top-level CMakeLists.txt.")
     endif()
     if(ANDROID)
-        _qt_internal_collect_apk_dependencies()
+        _qt56_internal_collect_apk_dependencies()
     endif()
 endfunction()
 
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
     function(qt_finalize_project)
         if(QT_DEFAULT_MAJOR_VERSION EQUAL 6)
-            qt6_finalize_project()
+            qt56_finalize_project()
         else()
             message(FATAL_ERROR "qt_finalize_project() is only available in Qt 6.")
         endif()
     endfunction()
 
     function(qt_disable_unicode_defines)
-        qt6_disable_unicode_defines(${ARGV})
+        qt56_disable_unicode_defines(${ARGV})
     endfunction()
 endif()
 
-function(_qt_internal_get_deploy_impl_dir var)
+function(_qt56_internal_get_deploy_impl_dir var)
     set(${var} "${CMAKE_BINARY_DIR}/.qt" PARENT_SCOPE)
 endfunction()
 
-function(_qt_internal_add_deploy_support deploy_support_file)
+function(_qt56_internal_add_deploy_support deploy_support_file)
     get_filename_component(deploy_support_file "${deploy_support_file}" REALPATH)
 
     set(target ${QT_CMAKE_EXPORT_NAMESPACE}::Core)
@@ -2954,16 +2498,16 @@ function(_qt_internal_add_deploy_support deploy_support_file)
         set(target ${aliased_target})
     endif()
 
-    get_property(scripts TARGET ${target} PROPERTY _qt_deploy_support_files)
+    get_property(scripts TARGET ${target} PROPERTY _qt56_deploy_support_files)
     if(NOT "${deploy_support_file}" IN_LIST scripts)
         set_property(TARGET ${target} APPEND PROPERTY
-            _qt_deploy_support_files "${deploy_support_file}"
+            _qt56_deploy_support_files "${deploy_support_file}"
         )
     endif()
 endfunction()
 
 # Sets up the commands for use at install/deploy time
-function(_qt_internal_setup_deploy_support)
+function(_qt56_internal_setup_deploy_support)
     if(QT_SKIP_SETUP_DEPLOYMENT)
         return()
     endif()
@@ -2976,7 +2520,7 @@ function(_qt_internal_setup_deploy_support)
     # Always set QT_DEPLOY_SUPPORT in the caller's scope, even if we've generated
     # the deploy support file in a previous call. The project may be calling
     # find_package() from sibling directories with separate variable scopes.
-    _qt_internal_get_deploy_impl_dir(deploy_impl_dir)
+    _qt56_internal_get_deploy_impl_dir(deploy_impl_dir)
 
     get_cmake_property(is_multi_config GENERATOR_IS_MULTI_CONFIG)
     if(is_multi_config)
@@ -2986,11 +2530,11 @@ function(_qt_internal_setup_deploy_support)
     endif()
     set(QT_DEPLOY_SUPPORT "${QT_DEPLOY_SUPPORT}" PARENT_SCOPE)
 
-    get_property(have_generated_file GLOBAL PROPERTY _qt_have_generated_deploy_support)
+    get_property(have_generated_file GLOBAL PROPERTY _qt56_have_generated_deploy_support)
     if(have_generated_file)
         return()
     endif()
-    set_property(GLOBAL PROPERTY _qt_have_generated_deploy_support TRUE)
+    set_property(GLOBAL PROPERTY _qt56_have_generated_deploy_support TRUE)
 
     include(GNUInstallDirs)
     set(target ${QT_CMAKE_EXPORT_NAMESPACE}::Core)
@@ -3010,9 +2554,9 @@ function(_qt_internal_setup_deploy_support)
         cmake_language(EVAL CODE
             "cmake_language(DEFER
                 DIRECTORY [[${CMAKE_SOURCE_DIR}]]
-                CALL _qt_internal_write_target_deploy_info [[${targets_file}]])"
+                CALL _qt56_internal_write_target_deploy_info [[${targets_file}]])"
         )
-        _qt_internal_add_deploy_support("${targets_file}")
+        _qt56_internal_add_deploy_support("${targets_file}")
     endif()
 
     # Make sure to look under the Qt bin dir with find_program, rather than randomly picking up
@@ -3065,7 +2609,7 @@ function(_qt_internal_setup_deploy_support)
         endif()
     endif()
 
-    _qt_internal_add_deploy_support("${CMAKE_CURRENT_LIST_DIR}/Qt6CoreDeploySupport.cmake")
+    _qt56_internal_add_deploy_support("${CMAKE_CURRENT_LIST_DIR}/Qt6CoreDeploySupport.cmake")
 
     set(deploy_ignored_lib_dirs "")
     if(__QT_DEPLOY_TOOL STREQUAL "GRD" AND NOT "${QT6_INSTALL_PREFIX}" STREQUAL "")
@@ -3129,25 +2673,25 @@ function(_qt_internal_setup_deploy_support)
 
 
 
-    set(target_qtpaths_path "")
+    set(target_qt56paths_path "")
     set(qtpaths_prefix "${QT6_INSTALL_PREFIX}/tools/Qt6/bin")
     get_property(qt_major_version TARGET "${target}" PROPERTY INTERFACE_QT_MAJOR_VERSION)
     if(qt_major_version)
-        set(target_qtpaths_with_major_version_path
+        set(target_qt56paths_with_major_version_path
             "${qtpaths_prefix}/qtpaths${qt_major_version}${qt_paths_ext}")
-        if(EXISTS "${target_qtpaths_with_major_version_path}")
-            set(target_qtpaths_path "${target_qtpaths_with_major_version_path}")
+        if(EXISTS "${target_qt56paths_with_major_version_path}")
+            set(target_qt56paths_path "${target_qt56paths_with_major_version_path}")
         endif()
     endif()
 
-    if(NOT target_qtpaths_path)
-        set(target_qtpaths_path_without_version "${qtpaths_prefix}/qtpaths${qt_paths_ext}")
-        if(EXISTS "${target_qtpaths_path_without_version}")
-            set(target_qtpaths_path "${target_qtpaths_path_without_version}")
+    if(NOT target_qt56paths_path)
+        set(target_qt56paths_path_without_version "${qtpaths_prefix}/qtpaths${qt_paths_ext}")
+        if(EXISTS "${target_qt56paths_path_without_version}")
+            set(target_qt56paths_path "${target_qt56paths_path_without_version}")
         endif()
     endif()
 
-    if(NOT target_qtpaths_path)
+    if(NOT target_qt56paths_path)
         message(DEBUG "No qtpaths executable found for deployment purposes.")
     endif()
 
@@ -3202,7 +2746,7 @@ set(__QT_DEPLOY_QT_INSTALL_DATA \"${QT6_INSTALL_DATA}\")
 set(__QT_DEPLOY_QT_INSTALL_LIBEXECS \"${QT6_INSTALL_LIBEXECS}\")
 set(__QT_DEPLOY_QT_INSTALL_PLUGINS \"${QT6_INSTALL_PLUGINS}\")
 set(__QT_DEPLOY_QT_INSTALL_TRANSLATIONS \"${QT6_INSTALL_TRANSLATIONS}\")
-set(__QT_DEPLOY_TARGET_QT_PATHS_PATH \"${target_qtpaths_path}\")
+set(__QT_DEPLOY_TARGET_QT_PATHS_PATH \"${target_qt56paths_path}\")
 set(__QT_DEPLOY_PLUGINS \"\")
 set(__QT_DEPLOY_MUST_ADJUST_PLUGINS_RPATH \"${must_adjust_plugins_rpath}\")
 set(__QT_DEPLOY_USE_PATCHELF \"${QT_DEPLOY_USE_PATCHELF}\")
@@ -3211,24 +2755,24 @@ set(__QT_DEPLOY_QT_IS_MULTI_CONFIG_BUILD_WITH_DEBUG \"${is_multi_config_build_wi
 set(__QT_DEPLOY_QT_DEBUG_POSTFIX \"${QT6_DEBUG_POSTFIX}\")
 
 # Define the CMake commands to be made available during deployment.
-set(__qt_deploy_support_files
-    \"$<JOIN:$<TARGET_GENEX_EVAL:${target},$<TARGET_PROPERTY:${target},_qt_deploy_support_files>>,\"
+set(__qt56_deploy_support_files
+    \"$<JOIN:$<TARGET_GENEX_EVAL:${target},$<TARGET_PROPERTY:${target},_qt56_deploy_support_files>>,\"
     \">\"
 )
-foreach(__qt_deploy_support_file IN LISTS __qt_deploy_support_files)
-    include(\"\${__qt_deploy_support_file}\")
+foreach(__qt56_deploy_support_file IN LISTS __qt56_deploy_support_files)
+    include(\"\${__qt56_deploy_support_file}\")
 endforeach()
 
-unset(__qt_deploy_support_file)
-unset(__qt_deploy_support_files)
+unset(__qt56_deploy_support_file)
+unset(__qt56_deploy_support_files)
 ")
 endfunction()
 
 # Write deployment information for the targets of the project.
-function(_qt_internal_write_target_deploy_info out_file)
+function(_qt56_internal_write_target_deploy_info out_file)
     set(targets "")
     set(dynamic_target_types EXECUTABLE SHARED_LIBRARY MODULE_LIBRARY)
-    _qt_internal_collect_buildsystem_targets(targets
+    _qt56_internal_collect_buildsystem_targets(targets
         "${CMAKE_SOURCE_DIR}" INCLUDE ${dynamic_target_types} STATIC_LIBRARY)
     set(content "")
     foreach(target IN LISTS targets)
@@ -3245,7 +2789,7 @@ function(_qt_internal_write_target_deploy_info out_file)
     file(GENERATE OUTPUT "${out_file}" CONTENT "${content}")
 endfunction()
 
-function(_qt_internal_is_examples_deployment_supported_in_current_config out_var out_var_reason)
+function(_qt56_internal_is_examples_deployment_supported_in_current_config out_var out_var_reason)
     # Deployment API doesn't work when examples / tests are built in-tree of a prefix qt build.
     if(QT_BUILDING_QT AND QT_WILL_INSTALL AND NOT QT_INTERNAL_BUILD_STANDALONE_PARTS)
         set(deployment_supported FALSE)
@@ -3259,9 +2803,9 @@ function(_qt_internal_is_examples_deployment_supported_in_current_config out_var
     set(${out_var_reason} "${not_supported_reason}" PARENT_SCOPE)
 endfunction()
 
-function(_qt_internal_should_skip_deployment_api out_var out_var_reason)
+function(_qt56_internal_should_skip_deployment_api out_var out_var_reason)
     set(skip_deployment FALSE)
-    _qt_internal_is_examples_deployment_supported_in_current_config(
+    _qt56_internal_is_examples_deployment_supported_in_current_config(
         deployment_supported
         not_supported_reason
     )
@@ -3283,7 +2827,7 @@ function(_qt_internal_should_skip_deployment_api out_var out_var_reason)
     set(${out_var_reason} "${reason}" PARENT_SCOPE)
 endfunction()
 
-function(_qt_internal_should_skip_post_build_deployment_api out_var out_var_reason)
+function(_qt56_internal_should_skip_post_build_deployment_api out_var out_var_reason)
     set(skip_deployment FALSE)
     set(deployment_supported TRUE)
 
@@ -3306,7 +2850,7 @@ endfunction()
 
 # Generate a deploy script that does nothing aside from showing a warning message.
 # The warning can be hidden by setting the QT_INTERNAL_HIDE_NO_OP_DEPLOYMENT_WARNING variable.
-function(_qt_internal_generate_no_op_deploy_script)
+function(_qt56_internal_generate_no_op_deploy_script)
     set(no_value_options
     )
     set(single_value_options
@@ -3352,7 +2896,7 @@ message(STATUS \"${function_name}(TARGET ${arg_TARGET}) is a no-op for prefix \"
 ")
     endif()
 
-    qt6_generate_deploy_script(
+    qt56_generate_deploy_script(
         ${generate_args}
         OUTPUT_SCRIPT deploy_script
         CONTENT "${content}")
@@ -3364,12 +2908,12 @@ endfunction()
 # A policy can be set to OLD, set to NEW or unset
 # unset is the default state
 #
-function(qt6_policy mode policy behaviorOrVariable)
+function(qt56_policy mode policy behaviorOrVariable)
     # When building Qt, tests and examples might expect a policy to be known, but they won't be
     # known depending on which scope or when a find_package(Module) with the respective policy
     # is called. Check the global list of known policies to accommodate that.
     if(QT_BUILDING_QT AND NOT DEFINED QT_KNOWN_POLICY_${policy})
-        get_property(global_known_policies GLOBAL PROPERTY _qt_global_known_policies)
+        get_property(global_known_policies GLOBAL PROPERTY _qt56_global_known_policies)
         if(policy IN_LIST global_known_policies)
             set(QT_KNOWN_POLICY_${policy} TRUE)
         endif()
@@ -3394,7 +2938,7 @@ function(qt6_policy mode policy behaviorOrVariable)
 endfunction()
 
 # Internal helper function; can be used in any module before doing a policy check
-function(__qt_internal_setup_policy policy sinceversion policyexplanation)
+function(__qt56_internal_setup_policy policy sinceversion policyexplanation)
     if(DEFINED __QT_INTERNAL_POLICY_${policy})
         if (__QT_INTERNAL_POLICY_${policy} STREQUAL "OLD")
             # policy is explicitly disabled
@@ -3404,7 +2948,7 @@ function(__qt_internal_setup_policy policy sinceversion policyexplanation)
             )
         endif()
         #else: policy is already enabled, nothing to do
-    elseif (${sinceversion} VERSION_LESS_EQUAL __qt_policy_check_version)
+    elseif (${sinceversion} VERSION_LESS_EQUAL __qt56_policy_check_version)
         # we cannot use the public function here as we want to set it in parent scope
         set(__QT_INTERNAL_POLICY_${policy} "NEW" PARENT_SCOPE)
     elseif(NOT "${QT_NO_SHOW_OLD_POLICY_WARNINGS}")
@@ -3418,57 +2962,57 @@ endfunction()
 
 # Note this needs to be a macro because it sets variables intended for the
 # calling scope.
-macro(qt6_standard_project_setup)
+macro(qt56_standard_project_setup)
     # A parent project might want to prevent child projects pulled in with
     # add_subdirectory() from changing the parent's preferred arrangement.
     # They can set this variable to true to effectively disable this function.
     if(NOT QT_NO_STANDARD_PROJECT_SETUP)
 
-        set(__qt_sps_args_option)
-        set(__qt_sps_args_single
+        set(__qt56_sps_args_option)
+        set(__qt56_sps_args_single
             REQUIRES
             SUPPORTS_UP_TO
             I18N_SOURCE_LANGUAGE
         )
-        set(__qt_sps_args_multi
+        set(__qt56_sps_args_multi
             I18N_TRANSLATED_LANGUAGES
         )
-        cmake_parse_arguments(__qt_sps_arg
-            "${__qt_sps_args_option}"
-            "${__qt_sps_args_single}"
-            "${__qt_sps_args_multi}"
+        cmake_parse_arguments(__qt56_sps_arg
+            "${__qt56_sps_args_option}"
+            "${__qt56_sps_args_single}"
+            "${__qt56_sps_args_multi}"
             ${ARGN}
         )
 
-        if(__qt_sps_arg_UNPARSED_ARGUMENTS)
+        if(__qt56_sps_arg_UNPARSED_ARGUMENTS)
             message(FATAL_ERROR "Unexpected arguments: ${arg_UNPARSED_ARGUMENTS}")
         endif()
 
         # Set the Qt CMake policy based on the requested version(s)
-        set(__qt_policy_check_version "6.0.0")
+        set(__qt56_policy_check_version "6.0.0")
         if(Qt6_VERSION_MAJOR)
-            set(__qt_current_version
+            set(__qt56_current_version
                 "${Qt6_VERSION_MAJOR}.${Qt6_VERSION_MINOR}.${Qt6_VERSION_PATCH}")
         elseif(QT_BUILDING_QT)
-            set(__qt_current_version
+            set(__qt56_current_version
                 "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}.${PROJECT_VERSION_PATCH}")
         else()
             message(FATAL_ERROR "Can not determine Qt version.")
         endif()
-        if(__qt_sps_arg_REQUIRES)
-            if("${__qt_current_version}" VERSION_LESS "${__qt_sps_arg_REQUIRES}")
+        if(__qt56_sps_arg_REQUIRES)
+            if("${__qt56_current_version}" VERSION_LESS "${__qt56_sps_arg_REQUIRES}")
                 message(FATAL_ERROR
-                    "Project required a Qt minimum version of ${__qt_sps_arg_REQUIRES}, "
-                    "but current version is only ${__qt_current_version}.")
+                    "Project required a Qt minimum version of ${__qt56_sps_arg_REQUIRES}, "
+                    "but current version is only ${__qt56_current_version}.")
             endif()
-            set(__qt_policy_check_version "${__qt_sps_arg_REQUIRES}")
+            set(__qt56_policy_check_version "${__qt56_sps_arg_REQUIRES}")
         endif()
-        if(__qt_sps_arg_SUPPORTS_UP_TO)
-            if(__qt_sps_arg_REQUIRES)
-                if(${__qt_sps_arg_SUPPORTS_UP_TO} VERSION_LESS ${__qt_sps_arg_REQUIRES})
+        if(__qt56_sps_arg_SUPPORTS_UP_TO)
+            if(__qt56_sps_arg_REQUIRES)
+                if(${__qt56_sps_arg_SUPPORTS_UP_TO} VERSION_LESS ${__qt56_sps_arg_REQUIRES})
                     message(FATAL_ERROR "SUPPORTS_UP_TO must be larger than or equal to REQUIRES.")
                 endif()
-                set(__qt_policy_check_version "${__qt_sps_arg_SUPPORTS_UP_TO}")
+                set(__qt56_policy_check_version "${__qt56_sps_arg_SUPPORTS_UP_TO}")
             else()
                 message(FATAL_ERROR "Please specify the REQUIRES as well.")
             endif()
@@ -3499,13 +3043,13 @@ macro(qt6_standard_project_setup)
             # project installs things to the directories defined by the
             # CMAKE_INSTALL_xxxDIR variables (which is what CMake's defaults
             # are based on).
-            file(RELATIVE_PATH __qt_relDir
+            file(RELATIVE_PATH __qt56_relDir
                 ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_INSTALL_BINDIR}
                 ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}
             )
-            list(APPEND CMAKE_INSTALL_RPATH $ORIGIN $ORIGIN/${__qt_relDir})
+            list(APPEND CMAKE_INSTALL_RPATH $ORIGIN $ORIGIN/${__qt56_relDir})
             list(REMOVE_DUPLICATES CMAKE_INSTALL_RPATH)
-            unset(__qt_reldir)
+            unset(__qt56_reldir)
         endif()
 
         # Turn these on by default, unless they are already set. Projects can
@@ -3518,24 +3062,24 @@ macro(qt6_standard_project_setup)
 
         # Enable folder support for IDEs. CMake >= 3.26 enables USE_FOLDERS by default but this is
         # guarded by CMake policy CMP0143.
-        get_property(__qt_use_folders GLOBAL PROPERTY USE_FOLDERS)
-        if(__qt_use_folders OR "${__qt_use_folders}" STREQUAL "")
+        get_property(__qt56_use_folders GLOBAL PROPERTY USE_FOLDERS)
+        if(__qt56_use_folders OR "${__qt56_use_folders}" STREQUAL "")
             set_property(GLOBAL PROPERTY USE_FOLDERS ON)
-            get_property(__qt_qt_targets_folder GLOBAL PROPERTY QT_TARGETS_FOLDER)
-            if("${__qt_qt_targets_folder}" STREQUAL "")
-                set(__qt_qt_targets_folder QtInternalTargets)
-                set_property(GLOBAL PROPERTY QT_TARGETS_FOLDER ${__qt_qt_targets_folder})
+            get_property(__qt56_qt56_targets_folder GLOBAL PROPERTY QT_TARGETS_FOLDER)
+            if("${__qt56_qt56_targets_folder}" STREQUAL "")
+                set(__qt56_qt56_targets_folder QtInternalTargets)
+                set_property(GLOBAL PROPERTY QT_TARGETS_FOLDER ${__qt56_qt56_targets_folder})
             endif()
-            get_property(__qt_autogen_targets_folder GLOBAL PROPERTY AUTOGEN_TARGETS_FOLDER)
-            if("${__qt_autogen_targets_folder}" STREQUAL "")
-                set_property(GLOBAL PROPERTY AUTOGEN_TARGETS_FOLDER ${__qt_qt_targets_folder})
+            get_property(__qt56_autogen_targets_folder GLOBAL PROPERTY AUTOGEN_TARGETS_FOLDER)
+            if("${__qt56_autogen_targets_folder}" STREQUAL "")
+                set_property(GLOBAL PROPERTY AUTOGEN_TARGETS_FOLDER ${__qt56_qt56_targets_folder})
             endif()
         endif()
 
         # Hide generated files in dedicated folder. Unfortunately we can't use a
         # top level "Generated Files" folder for this, as CMake will then put the
         # folder first in the list of folders, whereas we want to keep Sources and
-        # Headers front and center. See also _qt_internal_finalize_source_groups
+        # Headers front and center. See also _qt56_internal_finalize_source_groups
         set_property(GLOBAL PROPERTY AUTOGEN_SOURCE_GROUP "Source Files/Generated")
 
         # Treat metatypes JSON files as generated. We propagate these INTERFACE_SOURCES,
@@ -3545,15 +3089,15 @@ macro(qt6_standard_project_setup)
         source_group("Source Files/Generated" REGULAR_EXPRESSION "(_metatypes\\.json)$")
 
         # I18N support.
-        if(DEFINED __qt_sps_arg_I18N_TRANSLATED_LANGUAGES
+        if(DEFINED __qt56_sps_arg_I18N_TRANSLATED_LANGUAGES
                 AND NOT DEFINED QT_I18N_TRANSLATED_LANGUAGES)
-            set(QT_I18N_TRANSLATED_LANGUAGES ${__qt_sps_arg_I18N_TRANSLATED_LANGUAGES})
+            set(QT_I18N_TRANSLATED_LANGUAGES ${__qt56_sps_arg_I18N_TRANSLATED_LANGUAGES})
         endif()
-        if(NOT DEFINED __qt_sps_arg_I18N_SOURCE_LANGUAGE)
-            set(__qt_sps_arg_I18N_SOURCE_LANGUAGE en)
+        if(NOT DEFINED __qt56_sps_arg_I18N_SOURCE_LANGUAGE)
+            set(__qt56_sps_arg_I18N_SOURCE_LANGUAGE en)
         endif()
         if(NOT DEFINED QT_I18N_SOURCE_LANGUAGE)
-            set(QT_I18N_SOURCE_LANGUAGE ${__qt_sps_arg_I18N_SOURCE_LANGUAGE})
+            set(QT_I18N_SOURCE_LANGUAGE ${__qt56_sps_arg_I18N_SOURCE_LANGUAGE})
         endif()
 
         if(CMAKE_GENERATOR STREQUAL "Xcode")
@@ -3575,10 +3119,10 @@ endmacro()
 
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
     macro(qt_standard_project_setup)
-        qt6_standard_project_setup(${ARGV})
+        qt56_standard_project_setup(${ARGV})
     endmacro()
     macro(qt_policy)
-        qt6_policy(${ARGV})
+        qt56_policy(${ARGV})
     endmacro()
 endif()
 
@@ -3586,9 +3130,9 @@ endif()
 # The catalog "qtbase" is always added to the result.
 #
 # Example:
-#     _qt_internal_get_i18n_catalogs_for_modules(catalogs Quick Help)
+#     _qt56_internal_get_i18n_catalogs_for_modules(catalogs Quick Help)
 #     catalogs -> qtbase;qtdeclarative;qt_help
-function(_qt_internal_get_i18n_catalogs_for_modules out_var)
+function(_qt56_internal_get_i18n_catalogs_for_modules out_var)
     set(result "qtbase")
     set(modules "${ARGN}")
     set(module_catalog_mapping
@@ -3616,7 +3160,7 @@ function(_qt_internal_get_i18n_catalogs_for_modules out_var)
     set("${out_var}" "${result}" PARENT_SCOPE)
 endfunction()
 
-function(qt6_generate_deploy_script)
+function(qt56_generate_deploy_script)
     set(no_value_options "")
     set(single_value_options
         CONTENT
@@ -3661,7 +3205,7 @@ function(qt6_generate_deploy_script)
 
     # Check whether manual finalization is needed.
     if(CMAKE_VERSION VERSION_LESS "3.19")
-        get_target_property(is_immediately_finalized ${arg_TARGET} _qt_is_immediately_finalized)
+        get_target_property(is_immediately_finalized ${arg_TARGET} _qt56_is_immediately_finalized)
         if(is_immediately_finalized)
             message(WARNING
                 "Deployment of plugins for target '${arg_TARGET}' will not work. "
@@ -3672,13 +3216,13 @@ function(qt6_generate_deploy_script)
     endif()
 
     # Mark the target as "to be deployed".
-    set_property(TARGET ${arg_TARGET} PROPERTY _qt_marked_for_deployment ON)
+    set_property(TARGET ${arg_TARGET} PROPERTY _qt56_marked_for_deployment ON)
 
     # If the target already was finalized, maybe because it was defined in a subdirectory, generate
     # the plugin deployment information here.
-    get_target_property(is_finalized "${arg_TARGET}" _qt_is_finalized)
+    get_target_property(is_finalized "${arg_TARGET}" _qt56_is_finalized)
     if(is_finalized)
-        __qt_internal_generate_plugin_deployment_info(${arg_TARGET})
+        __qt56_internal_generate_plugin_deployment_info(${arg_TARGET})
     endif()
 
     # Create a file name that will be unique for this target and the combination
@@ -3694,7 +3238,7 @@ function(qt6_generate_deploy_script)
     string(MAKE_C_IDENTIFIER "${file_base_name}" target_id)
     string(SHA1 args_hash "${ARGV}")
     string(SUBSTRING "${args_hash}" 0 10 short_hash)
-    _qt_internal_get_deploy_impl_dir(deploy_impl_dir)
+    _qt56_internal_get_deploy_impl_dir(deploy_impl_dir)
     set(deploy_script "${deploy_impl_dir}/deploy_${target_id}_${short_hash}")
     get_cmake_property(is_multi_config GENERATOR_IS_MULTI_CONFIG)
     if(is_multi_config)
@@ -3705,7 +3249,7 @@ function(qt6_generate_deploy_script)
     string(APPEND deploy_script "${config_infix}.cmake")
     set(${arg_OUTPUT_SCRIPT} "${deploy_script}" PARENT_SCOPE)
 
-    _qt_internal_get_i18n_catalogs_for_modules(catalogs ${QT_ALL_MODULES_FOUND_VIA_FIND_PACKAGE})
+    _qt56_internal_get_i18n_catalogs_for_modules(catalogs ${QT_ALL_MODULES_FOUND_VIA_FIND_PACKAGE})
     set(boiler_plate "include(\"${QT_DEPLOY_SUPPORT}\")
 include(\"\${CMAKE_CURRENT_LIST_DIR}/${arg_TARGET}-plugins${config_infix}.cmake\" OPTIONAL)
 set(__QT_DEPLOY_I18N_CATALOGS \"${catalogs}\")
@@ -3717,14 +3261,14 @@ endfunction()
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
     macro(qt_generate_deploy_script)
         if(QT_DEFAULT_MAJOR_VERSION EQUAL 6)
-            qt6_generate_deploy_script(${ARGV})
+            qt56_generate_deploy_script(${ARGV})
         else()
             message(FATAL_ERROR "qt_generate_deploy_script() is only available in Qt 6.")
         endif()
     endmacro()
 endif()
 
-function(qt6_generate_deploy_app_script)
+function(qt56_generate_deploy_app_script)
     # We use a TARGET keyword option instead of taking the target as the first
     # positional argument. This is to keep open the possibility of deploying
     # an app for which we don't have a target (e.g. an application from a
@@ -3825,27 +3369,27 @@ function(qt6_generate_deploy_app_script)
         endif()
     endforeach()
 
-    _qt_internal_should_skip_deployment_api(skip_deployment skip_reason)
+    _qt56_internal_should_skip_deployment_api(skip_deployment skip_reason)
     if(skip_deployment)
-        _qt_internal_generate_no_op_deploy_script(
-            FUNCTION_NAME "qt6_generate_deploy_app_script"
+        _qt56_internal_generate_no_op_deploy_script(
+            FUNCTION_NAME "qt56_generate_deploy_app_script"
             SKIP_REASON "${skip_reason}"
             ${generate_args}
         )
     elseif(APPLE AND NOT IOS AND QT6_IS_SHARED_LIBS_BUILD AND is_bundle)
         # TODO: Consider handling non-bundle applications in the future using the generic cmake
         # runtime dependency feature.
-        qt6_generate_deploy_script(${generate_args}
+        qt56_generate_deploy_script(${generate_args}
             CONTENT "
-qt6_deploy_runtime_dependencies(
+qt56_deploy_runtime_dependencies(
     EXECUTABLE $<TARGET_FILE_NAME:${arg_TARGET}>.app
 ${common_deploy_args})
 ")
 
     elseif(WIN32 AND QT6_IS_SHARED_LIBS_BUILD)
-        qt6_generate_deploy_script(${generate_args}
+        qt56_generate_deploy_script(${generate_args}
             CONTENT "
-qt6_deploy_runtime_dependencies(
+qt56_deploy_runtime_dependencies(
     EXECUTABLE $<TARGET_FILE:${arg_TARGET}>
     GENERATE_QT_CONF
 ${common_deploy_args})
@@ -3853,9 +3397,9 @@ ${common_deploy_args})
 
     elseif(UNIX AND NOT APPLE AND NOT ANDROID AND QT6_IS_SHARED_LIBS_BUILD
             AND NOT CMAKE_CROSSCOMPILING)
-        qt6_generate_deploy_script(${generate_args}
+        qt56_generate_deploy_script(${generate_args}
             CONTENT "
-qt6_deploy_runtime_dependencies(
+qt56_deploy_runtime_dependencies(
     EXECUTABLE $<TARGET_FILE:${arg_TARGET}>
     GENERATE_QT_CONF
 ${common_deploy_args})
@@ -3872,13 +3416,13 @@ ${common_deploy_args})
         )
     else()
         set(skip_message
-            "_qt_internal_show_skip_runtime_deploy_message(\"${qt_build_type_string}\"")
+            "_qt56_internal_show_skip_runtime_deploy_message(\"${qt_build_type_string}\"")
         if(unsupported_platform_extra_message)
             string(APPEND skip_message
                 "\n    EXTRA_MESSAGE \"${unsupported_platform_extra_message}\"")
         endif()
         string(APPEND skip_message "\n)")
-        qt6_generate_deploy_script(${generate_args} CONTENT "${skip_message}")
+        qt56_generate_deploy_script(${generate_args} CONTENT "${skip_message}")
     endif()
 
     set(${arg_OUTPUT_SCRIPT} "${deploy_script}" PARENT_SCOPE)
@@ -3886,6 +3430,6 @@ endfunction()
 
 if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
     macro(qt_generate_deploy_app_script)
-        qt6_generate_deploy_app_script(${ARGV})
+        qt56_generate_deploy_app_script(${ARGV})
     endmacro()
 endif()
