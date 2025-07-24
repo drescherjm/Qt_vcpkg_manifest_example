@@ -12,132 +12,34 @@
 # deferred function where the variable might not be accessible by the function scope.
 set_property(GLOBAL PROPERTY __qt56_core_macros_module_base_dir "${CMAKE_CURRENT_LIST_DIR}")
 
+set(_QT56 Qt${QT_VERSION_MAJOR})
 
-# qt56_add_big_resources(outfiles inputfile ... )
+# Other includes ported from Qt6
+include(${CMAKE_CURRENT_LIST_DIR}/Qt56PublicTargetHelpers.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/Qt56PublicWalkLibsHelpers.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/Qt56PublicPluginHelpers.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/Qt56PublicFinalizerHelpers.cmake)
 
-function(qt56_add_big_resources outfiles )
-    if(CMAKE_GENERATOR STREQUAL "Xcode" AND IOS)
-        message(WARNING
-            "Due to CMake limitations, qt56_add_big_resources can't be used when building for iOS. "
-            "See https://bugreports.qt.io/browse/QTBUG-103497 for details. "
-            "Falling back to using qt56_add_resources. "
-            "Consider using qt56_add_resources directly to silence this warning."
-        )
-        qt56_add_resources(${ARGV})
-        set(${outfiles} ${${outfiles}} PARENT_SCOPE)
-        return()
-    endif()
+######################################
 
-    if (CMAKE_VERSION VERSION_LESS 3.9)
-        message(FATAL_ERROR, "qt56_add_big_resources requires CMake 3.9 or newer")
-    endif()
-
-    set(options)
-    set(oneValueArgs)
-    set(multiValueArgs OPTIONS)
-
-    cmake_parse_arguments(_RCC "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
-
-    set(rcc_files ${_RCC_UNPARSED_ARGUMENTS})
-    set(rcc_options ${_RCC_OPTIONS})
-
-    if("${rcc_options}" MATCHES "-binary")
-        message(WARNING "Use qt56_add_binary_resources for binary option")
-    endif()
-
-    if(NOT QT_FEATURE_zstd)
-        list(APPEND rcc_options "--no-zstd")
-    endif()
-
-    foreach(it ${rcc_files})
-        get_filename_component(outfilename ${it} NAME_WE)
-
-        # Provide unique targets and output file names
-        # in case we add multiple .qrc files with the same base name.
-        string(MAKE_C_IDENTIFIER "_qt56_big_resource_count_${outfilename}" prop)
-        get_property(count GLOBAL PROPERTY ${prop})
-        if(count)
-            string(APPEND outfilename "_${count}")
+function(__qt56_internal_set_cmp0156)
+    if(POLICY CMP0156)
+        if(QT_FORCE_CMP0156_TO_NEW)
+            cmake_policy(SET CMP0156 "NEW")
         else()
-            set(count 0)
+            cmake_policy(GET CMP0156 policy_value)
+            if(NOT "${policy_value}" STREQUAL "OLD")
+                if("${policy_value}" STREQUAL "NEW" AND NOT QT_BUILDING_QT)
+                    message(WARNING "CMP0156 is set to '${policy_value}'. Qt forces the 'OLD'"
+                        " behavior of this policy by default. Set QT_FORCE_CMP0156_TO_NEW=ON to"
+                        " force the 'NEW' behavior for the Qt commands that create either"
+                        " library or executable targets.")
+                endif()
+                cmake_policy(SET CMP0156 "OLD")
+            endif()
         endif()
-        math(EXPR count "${count} + 1")
-        set_property(GLOBAL PROPERTY ${prop} ${count})
-
-        get_filename_component(infile ${it} ABSOLUTE)
-        set(tmpoutfile ${CMAKE_CURRENT_BINARY_DIR}/qrc_${outfilename}tmp.cpp)
-        set(outfile ${CMAKE_CURRENT_BINARY_DIR}/qrc_${outfilename}.o)
-
-        _qt56_parse_qrc_file(${infile} _out_depends _rc_depends)
-        set_source_files_properties(${infile} PROPERTIES SKIP_AUTOGEN ON)
-        if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.27")
-            set_source_files_properties(${tmpoutfile} PROPERTIES SKIP_LINTING ON)
-        endif()
-        add_custom_command(OUTPUT ${tmpoutfile}
-                           COMMAND ${QT_CMAKE_EXPORT_NAMESPACE}::rcc ${rcc_options} --name ${outfilename} --pass 1 --output ${tmpoutfile} ${infile}
-                           DEPENDS ${infile} ${_rc_depends} "${out_depends}" ${QT_CMAKE_EXPORT_NAMESPACE}::rcc
-                           COMMENT "Running rcc pass 1 for resource ${outfilename}"
-                           VERBATIM)
-        add_custom_target(big_resources_${outfilename} ALL DEPENDS ${tmpoutfile})
-        _qt56_internal_add_rcc_pass2(
-            RESOURCE_NAME ${outfilename}
-            RCC_OPTIONS ${rcc_options}
-            OBJECT_LIB rcc_object_${outfilename}
-            QRC_FILE ${infile}
-            PASS1_OUTPUT_FILE ${tmpoutfile}
-            OUT_OBJECT_FILE ${outfile}
-        )
-        add_dependencies(rcc_object_${outfilename} big_resources_${outfilename})
-        list(APPEND ${outfiles} ${outfile})
-    endforeach()
-    set(${outfiles} ${${outfiles}} PARENT_SCOPE)
+    endif()
 endfunction()
-
-function(_qt56_internal_add_rcc_pass2)
-    set(options)
-    set(oneValueArgs
-        RESOURCE_NAME
-        OBJECT_LIB
-        QRC_FILE
-        PASS1_OUTPUT_FILE
-        OUT_OBJECT_FILE
-    )
-    set(multiValueArgs
-        RCC_OPTIONS
-    )
-    cmake_parse_arguments(arg "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
-
-    add_library(${arg_OBJECT_LIB} OBJECT ${arg_PASS1_OUTPUT_FILE})
-    _qt56_internal_set_up_static_runtime_library(${arg_OBJECT_LIB})
-    target_compile_definitions(${arg_OBJECT_LIB} PUBLIC
-        "$<TARGET_PROPERTY:Qt6::Core,INTERFACE_COMPILE_DEFINITIONS>")
-    set_target_properties(${arg_OBJECT_LIB} PROPERTIES
-        AUTOMOC OFF
-        AUTOUIC OFF)
-    # The modification of TARGET_OBJECTS needs the following change in cmake
-    # https://gitlab.kitware.com/cmake/cmake/commit/93c89bc75ceee599ba7c08b8fe1ac5104942054f
-    add_custom_command(
-        OUTPUT ${arg_OUT_OBJECT_FILE}
-        COMMAND ${QT_CMAKE_EXPORT_NAMESPACE}::rcc
-                ${arg_RCC_OPTIONS} --name ${arg_RESOURCE_NAME} --pass 2
-                --temp $<TARGET_OBJECTS:${arg_OBJECT_LIB}>
-                --output ${arg_OUT_OBJECT_FILE} ${arg_QRC_FILE}
-        DEPENDS ${arg_OBJECT_LIB} $<TARGET_OBJECTS:${arg_OBJECT_LIB}>
-                ${QT_CMAKE_EXPORT_NAMESPACE}::rcc
-        COMMENT "Running rcc pass 2 for resource ${arg_RESOURCE_NAME}"
-        VERBATIM)
-endfunction()
-
-if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    function(qt_add_big_resources outfiles)
-        if(QT_DEFAULT_MAJOR_VERSION EQUAL 5)
-            qt5_add_big_resources(${outfiles} ${ARGN})
-        elseif(QT_DEFAULT_MAJOR_VERSION EQUAL 6)
-            qt56_add_big_resources(${outfiles} ${ARGN})
-        endif()
-        set("${outfiles}" "${${outfiles}}" PARENT_SCOPE)
-    endfunction()
-endif()
 
 function(_qt56_internal_apply_win_prefix_and_suffix target)
     if(WIN32)
@@ -188,7 +90,7 @@ function(qt56_add_executable target)
     _qt56_internal_warn_about_example_add_subdirectory()
 
     _qt56_internal_create_executable("${target}" ${arg_UNPARSED_ARGUMENTS})
-    target_link_libraries("${target}" PRIVATE Qt6::Core)
+    target_link_libraries("${target}" PRIVATE ${_QT56}::Core)
     set_property(TARGET ${target} PROPERTY _qt56_expects_finalization TRUE)
 
     if(arg_MANUAL_FINALIZATION)
@@ -484,20 +386,6 @@ function(_qt56_internal_darwin_permission_finalizer target)
     endforeach()
 endfunction()
 
-if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    function(qt_add_executable)
-        qt56_add_executable(${ARGV})
-    endfunction()
-    function(qt_finalize_target)
-        qt56_finalize_target(${ARGV})
-    endfunction()
-
-    # Kept for compatibility with Qt Creator 4.15 wizards
-    function(qt_finalize_executable)
-        qt56_finalize_target(${ARGV})
-    endfunction()
-endif()
-
 function(_qt56_get_plugin_name_with_version target out_var)
     string(REGEX REPLACE "^Qt::(.+)" "Qt${QT_DEFAULT_MAJOR_VERSION}::\\1"
            qt_plugin_with_version "${target}")
@@ -585,16 +473,6 @@ function(qt56_import_plugins target)
     endforeach()
 endfunction()
 
-if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    function(qt_import_plugins)
-        if(QT_DEFAULT_MAJOR_VERSION EQUAL 5)
-            qt5_import_plugins(${ARGV})
-        elseif(QT_DEFAULT_MAJOR_VERSION EQUAL 6)
-            qt56_import_plugins(${ARGV})
-        endif()
-    endfunction()
-endif()
-
 # This function is currently in Technical Preview. It's signature may change or be removed entirely.
 function(qt56_set_finalizer_mode target)
     cmake_parse_arguments(arg "ENABLE;DISABLE" "" "MODES" ${ARGN})
@@ -617,12 +495,6 @@ function(qt56_set_finalizer_mode target)
         __qt56_internal_enable_finalizer_mode("${target}" "${mode}" "${value}")
     endforeach()
 endfunction()
-
-if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    function(qt_set_finalizer_mode)
-        qt56_set_finalizer_mode(${ARGV})
-    endfunction()
-endif()
 
 function(_qt56_internal_assign_to_internal_targets_folder target)
     get_property(folder_name GLOBAL PROPERTY QT_TARGETS_FOLDER)
@@ -1085,16 +957,6 @@ function(qt56_extract_metatypes target)
         install(FILES "${metatypes_file}" DESTINATION "${install_dir}")
     endif()
 endfunction()
-
-if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    function(qt_extract_metatypes)
-        qt56_extract_metatypes(${ARGV})
-        cmake_parse_arguments(PARSE_ARGV 0 arg "" "OUTPUT_FILES" "")
-        if(arg_OUTPUT_FILES)
-            set(${arg_OUTPUT_FILES} "${${arg_OUTPUT_FILES}}" PARENT_SCOPE)
-        endif()
-    endfunction()
-endif()
 
 # Generate Win32 RC files for a target. All entries in the RC file are generated
 # from target properties:
@@ -2237,16 +2099,6 @@ function(qt56_add_plugin target)
     _qt56_internal_finalize_target_defer("${target}")
 endfunction()
 
-if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    function(qt_add_plugin)
-        qt56_add_plugin(${ARGV})
-        cmake_parse_arguments(PARSE_ARGV 1 arg "" "OUTPUT_TARGETS" "")
-        if(arg_OUTPUT_TARGETS)
-            set(${arg_OUTPUT_TARGETS} ${${arg_OUTPUT_TARGETS}} PARENT_SCOPE)
-        endif()
-    endfunction()
-endif()
-
 # Creates a library by forwarding arguments to add_library, applies some Qt naming file name naming
 # conventions and ensures the execution of Qt specific finalizers.
 function(qt56_add_library target)
@@ -2362,12 +2214,6 @@ function(_qt56_internal_add_library target)
     endif()
 endfunction()
 
-if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    function(qt_add_library)
-        qt56_add_library(${ARGV})
-    endfunction()
-endif()
-
 # TODO: Remove once all repositories use qt_internal_add_example instead of add_subdirectory.
 macro(_qt56_internal_override_example_install_dir_to_dot)
     # Set INSTALL_EXAMPLEDIR to ".".
@@ -2382,12 +2228,6 @@ endmacro()
 function(qt56_allow_non_utf8_sources target)
     set_target_properties("${target}" PROPERTIES QT_NO_UTF8_SOURCE TRUE)
 endfunction()
-
-if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    function(qt_allow_non_utf8_sources)
-        qt56_allow_non_utf8_sources(${ARGV})
-    endfunction()
-endif()
 
 function(_qt56_internal_apply_strict_cpp target)
     # Disable C, Obj-C and C++ GNU extensions aka no "-std=gnu++11".
@@ -2470,20 +2310,6 @@ function(qt56_finalize_project)
         _qt56_internal_collect_apk_dependencies()
     endif()
 endfunction()
-
-if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    function(qt_finalize_project)
-        if(QT_DEFAULT_MAJOR_VERSION EQUAL 6)
-            qt56_finalize_project()
-        else()
-            message(FATAL_ERROR "qt_finalize_project() is only available in Qt 6.")
-        endif()
-    endfunction()
-
-    function(qt_disable_unicode_defines)
-        qt56_disable_unicode_defines(${ARGV})
-    endfunction()
-endif()
 
 function(_qt56_internal_get_deploy_impl_dir var)
     set(${var} "${CMAKE_BINARY_DIR}/.qt" PARENT_SCOPE)
@@ -2990,12 +2816,10 @@ macro(qt56_standard_project_setup)
 
         # Set the Qt CMake policy based on the requested version(s)
         set(__qt56_policy_check_version "6.0.0")
-        if(Qt6_VERSION_MAJOR)
+
+        if (QT_VERSION_MAJOR EQUAL 5 OR QT_VERSION_MAJOR EQUAL 6)
             set(__qt56_current_version
-                "${Qt6_VERSION_MAJOR}.${Qt6_VERSION_MINOR}.${Qt6_VERSION_PATCH}")
-        elseif(QT_BUILDING_QT)
-            set(__qt56_current_version
-                "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}.${PROJECT_VERSION_PATCH}")
+                "${QT_VERSION_MAJOR}.${QT_VERSION_MINOR}.${QT_VERSION_PATCH}")
         else()
             message(FATAL_ERROR "Can not determine Qt version.")
         endif()
@@ -3116,15 +2940,6 @@ macro(qt56_standard_project_setup)
         endif()
     endif()
 endmacro()
-
-if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    macro(qt_standard_project_setup)
-        qt56_standard_project_setup(${ARGV})
-    endmacro()
-    macro(qt_policy)
-        qt56_policy(${ARGV})
-    endmacro()
-endif()
 
 # Store in ${out_var} the i18n catalogs that belong to the passed Qt modules.
 # The catalog "qtbase" is always added to the result.
@@ -3257,16 +3072,6 @@ set(__QT_DEPLOY_I18N_CATALOGS \"${catalogs}\")
     list(TRANSFORM arg_CONTENT REPLACE "\\$" "\$")
     file(GENERATE OUTPUT ${deploy_script} CONTENT "${boiler_plate}${arg_CONTENT}")
 endfunction()
-
-if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    macro(qt_generate_deploy_script)
-        if(QT_DEFAULT_MAJOR_VERSION EQUAL 6)
-            qt56_generate_deploy_script(${ARGV})
-        else()
-            message(FATAL_ERROR "qt_generate_deploy_script() is only available in Qt 6.")
-        endif()
-    endmacro()
-endif()
 
 function(qt56_generate_deploy_app_script)
     # We use a TARGET keyword option instead of taking the target as the first
@@ -3427,9 +3232,3 @@ ${common_deploy_args})
 
     set(${arg_OUTPUT_SCRIPT} "${deploy_script}" PARENT_SCOPE)
 endfunction()
-
-if(NOT QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    macro(qt_generate_deploy_app_script)
-        qt56_generate_deploy_app_script(${ARGV})
-    endmacro()
-endif()

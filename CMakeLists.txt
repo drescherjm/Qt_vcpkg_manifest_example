@@ -16,6 +16,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Find Qt via vcpkg if not found fail hard!
 find_package(QT NAMES Qt5 Qt6 REQUIRED)
 
+include(CMake/Qt56CoreMacros.cmake)
+
+qt56_standard_project_setup()
+
 # The ability to support Qt5 or Qt6 is based on the following stackoverflow answer:
 # https://stackoverflow.com/a/71131723/487892
 
@@ -30,14 +34,7 @@ set(APP_QT_TARGETS ${QT}::Core ${QT}::Widgets)
 # Here everything is simple - find the modules we need.
 find_package(${QT} REQUIRED ${APP_QT_MODULES})
 
-#if(UNIX)
-#    set(CMAKE_VERBOSE_MAKEFILE ON)
-#    set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
-#    set(CMAKE_INSTALL_RPATH "$ORIGIN/../lib")
-#    set(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE)
-#endif()
-
-add_executable(${LOCAL_PROJECT_NAME} main.cpp)
+qt56_add_executable(${LOCAL_PROJECT_NAME} main.cpp)
 
 target_link_libraries(${LOCAL_PROJECT_NAME} PRIVATE ${APP_QT_TARGETS})
 
@@ -109,5 +106,4 @@ install(CODE [[
 	# ]]
 # )
 
-
-include(CMake/SetupProjectPackaging.cmake)
+#include(CMake/SetupProjectPackaging.cmake)
