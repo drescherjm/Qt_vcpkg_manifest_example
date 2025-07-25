@@ -54,9 +54,11 @@ if (QT_VERSION_MAJOR EQUAL 6)
 	endif()
 endif()
 
-#include(CMake/HelperMacros.cmake)
+include(CMake/HelperMacros.cmake)
 #_get_all_cmake_targets( CMAKE_TARGETS ${CMAKE_SOURCE_DIR} )
 #echo_targets( ${CMAKE_TARGETS} )
+dump_all_variables()
+
 
 #include(CMake/DeployQtInstall.cmake)
 #install_qt_runtime(${LOCAL_PROJECT_NAME})
