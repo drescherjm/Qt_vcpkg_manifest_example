@@ -16,6 +16,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Find Qt via vcpkg if not found fail hard!
 find_package(QT NAMES Qt5 Qt6 REQUIRED)
 
+include(CMake/Qt56CoreMacros.cmake)
+
+qt56_standard_project_setup()
+
 # The ability to support Qt5 or Qt6 is based on the following stackoverflow answer:
 # https://stackoverflow.com/a/71131723/487892
 
@@ -30,14 +34,7 @@ set(APP_QT_TARGETS ${QT}::Core ${QT}::Widgets)
 # Here everything is simple - find the modules we need.
 find_package(${QT} REQUIRED ${APP_QT_MODULES})
 
-#if(UNIX)
-#    set(CMAKE_VERBOSE_MAKEFILE ON)
-#    set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
-#    set(CMAKE_INSTALL_RPATH "$ORIGIN/../lib")
-#    set(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE)
-#endif()
-
-add_executable(${LOCAL_PROJECT_NAME} main.cpp)
+qt56_add_executable(${LOCAL_PROJECT_NAME} main.cpp)
 
 target_link_libraries(${LOCAL_PROJECT_NAME} PRIVATE ${APP_QT_TARGETS})
 
@@ -73,21 +70,21 @@ install(TARGETS ${LOCAL_PROJECT_NAME}
     ARCHIVE DESTINATION lib
 )
 
-add_executable_target_for_packaging( $<TARGET_FILE:${LOCAL_PROJECT_NAME}> )
-install_runtime_dependencies_of_packaging_targets()
+#add_executable_target_for_packaging( $<TARGET_FILE:${LOCAL_PROJECT_NAME}> )
+#install_runtime_dependencies_of_packaging_targets()
 
-	if(MSVC)
-		install(CODE "set(RUNTIME_LIBRARY_DESTINATION \"bin\")")
-	else(MSVC)
-		install(CODE "set (RUNTIME_LIBRARY_DESTINATION \"/usr/local/${PROJECT_NAME}/lib\")")
-	endif(MSVC)
+#	if(MSVC)
+#		install(CODE "set(RUNTIME_LIBRARY_DESTINATION \"bin\")")
+#	else(MSVC)
+#		install(CODE "set (RUNTIME_LIBRARY_DESTINATION \"/usr/local/${PROJECT_NAME}/lib\")")
+#	endif(MSVC)
 
 #install(IMPOR
 
-    install(IMPORTED_RUNTIME_ARTIFACTS ${LOCAL_PROJECT_NAME}
-        LIBRARY DESTINATION lib
-        RUNTIME DESTINATION bin
-        )
+ #   install(IMPORTED_RUNTIME_ARTIFACTS ${LOCAL_PROJECT_NAME}
+ #       LIBRARY DESTINATION lib
+ #       RUNTIME DESTINATION bin
+ #       )
 
 # install(RUNTIME_DEPENDENCY_SET MyDeps
         # PRE_EXCLUDE_REGEXES [=[Azure]=] [=[api-ms-]=] [=[ext-ms-]=] [[kernel32\\.dll]] 
@@ -109,5 +106,11 @@ install(CODE [[
 	# ]]
 # )
 
+#include(CMake/SetupProjectPackaging.cmake)
 
-include(CMake/SetupProjectPackaging.cmake)
+qt56_generate_deploy_app_script(
+    TARGET ${LOCAL_PROJECT_NAME}
+    OUTPUT_SCRIPT deploy_script
+    NO_UNSUPPORTED_PLATFORM_ERROR
+)
+install(SCRIPT ${deploy_script})
