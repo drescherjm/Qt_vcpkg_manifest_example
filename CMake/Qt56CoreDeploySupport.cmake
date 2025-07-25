@@ -461,6 +461,8 @@ function(qt56_deploy_runtime_dependencies)
                     "at: ${__QT_DEPLOY_TARGET_QT_PATHS_PATH}. "
                     "Libraries may not be deployed correctly.")
             endif()
+        elseif (QT_VERSION_MAJOR EQUAL 5)
+
         endif()
 
         list(APPEND tool_options ${arg_DEPLOY_TOOL_OPTIONS})
