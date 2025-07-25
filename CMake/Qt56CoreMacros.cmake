@@ -13,12 +13,15 @@
 set_property(GLOBAL PROPERTY __qt56_core_macros_module_base_dir "${CMAKE_CURRENT_LIST_DIR}")
 
 set(_QT56 Qt${QT_VERSION_MAJOR})
+set(QT_CMAKE_EXPORT_NAMESPACE ${_QT56})
 
 # Other includes ported from Qt6
 include(${CMAKE_CURRENT_LIST_DIR}/Qt56PublicTargetHelpers.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/Qt56PublicWalkLibsHelpers.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/Qt56PublicPluginHelpers.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/Qt56PublicFinalizerHelpers.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/Qt56CoreDeploySupport.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/Qt56PublicCMakeHelpers.cmake)
 
 ######################################
 
@@ -1996,7 +1999,7 @@ function(qt56_add_plugin target)
         set(create_static_plugin FALSE)
     else()
         # If no explicit STATIC/SHARED option is set, default to the flavor of the Qt build.
-        if(QT6_IS_SHARED_LIBS_BUILD)
+        if(_QT56_IS_SHARED_LIBS_BUILD)
             set(create_static_plugin FALSE)
         else()
             set(create_static_plugin TRUE)
@@ -2175,13 +2178,13 @@ function(_qt56_internal_add_library target)
         endif()
 
         if(build_shared_libs_policy STREQUAL "NEW" OR QT_BUILDING_QT OR QT_BUILD_STANDALONE_TESTS)
-            if(BUILD_SHARED_LIBS OR (NOT DEFINED BUILD_SHARED_LIBS AND QT6_IS_SHARED_LIBS_BUILD))
+            if(BUILD_SHARED_LIBS OR (NOT DEFINED BUILD_SHARED_LIBS AND _QT56_IS_SHARED_LIBS_BUILD))
                 set(type_to_create SHARED)
             else()
                 set(type_to_create STATIC)
             endif()
         else()
-            if(QT6_IS_SHARED_LIBS_BUILD)
+            if(_QT56_IS_SHARED_LIBS_BUILD)
                 set(type_to_create SHARED)
             else()
                 set(type_to_create STATIC)
@@ -2389,8 +2392,15 @@ function(_qt56_internal_setup_deploy_support)
     # a deployqt tool in the system.
     # QT6_INSTALL_PREFIX is not set during Qt build, so add the hints conditionally.
     set(find_program_hints)
-    if(QT6_INSTALL_PREFIX)
-        set(find_program_hints HINTS ${QT6_INSTALL_PREFIX}/${QT6_INSTALL_BINS})
+
+    if (QT_VERSION_MAJOR EQUAL 6)
+        if(QT6_INSTALL_PREFIX)
+            set(find_program_hints HINTS ${QT6_INSTALL_PREFIX}/${QT6_INSTALL_BINS})
+        endif()
+    else()
+        if (_qt5_install_prefix)
+            set(find_program_hints HINTS ${_qt5_install_prefix})
+        endif()
     endif()
 
     # In the generator expression logic below, we need safe_target_file because
@@ -2435,7 +2445,7 @@ function(_qt56_internal_setup_deploy_support)
         endif()
     endif()
 
-    _qt56_internal_add_deploy_support("${CMAKE_CURRENT_LIST_DIR}/Qt6CoreDeploySupport.cmake")
+    _qt56_internal_add_deploy_support("${CMAKE_CURRENT_LIST_DIR}/Qt56CoreDeploySupport.cmake")
 
     set(deploy_ignored_lib_dirs "")
     if(__QT_DEPLOY_TOOL STREQUAL "GRD" AND NOT "${QT6_INSTALL_PREFIX}" STREQUAL "")
@@ -2497,8 +2507,6 @@ function(_qt56_internal_setup_deploy_support)
         set(qt_paths_ext "")
     endif()
 
-
-
     set(target_qt56paths_path "")
     set(qtpaths_prefix "${QT6_INSTALL_PREFIX}/tools/Qt6/bin")
     get_property(qt_major_version TARGET "${target}" PROPERTY INTERFACE_QT_MAJOR_VERSION)
@@ -2556,7 +2564,7 @@ endif()
 
 # These are internal implementation details. They may be removed at any time.
 set(__QT_DEPLOY_SYSTEM_NAME \"${CMAKE_SYSTEM_NAME}\")
-set(__QT_DEPLOY_IS_SHARED_LIBS_BUILD \"${QT6_IS_SHARED_LIBS_BUILD}\")
+set(__QT_DEPLOY_IS_SHARED_LIBS_BUILD \"${_QT56_IS_SHARED_LIBS_BUILD}\")
 set(__QT_DEPLOY_TOOL \"${__QT_DEPLOY_TOOL}\")
 set(__QT_DEPLOY_IMPL_DIR \"${deploy_impl_dir}\")
 set(__QT_DEPLOY_VERBOSE \"${QT_ENABLE_VERBOSE_DEPLOYMENT}\")
@@ -3138,7 +3146,7 @@ function(qt56_generate_deploy_app_script)
     get_target_property(is_bundle ${arg_TARGET} MACOSX_BUNDLE)
 
     set(unsupported_platform_extra_message "")
-    if(QT6_IS_SHARED_LIBS_BUILD)
+    if(_QT56_IS_SHARED_LIBS_BUILD)
         set(qt_build_type_string "shared Qt libs")
     else()
         set(qt_build_type_string "static Qt libs")
@@ -3181,7 +3189,7 @@ function(qt56_generate_deploy_app_script)
             SKIP_REASON "${skip_reason}"
             ${generate_args}
         )
-    elseif(APPLE AND NOT IOS AND QT6_IS_SHARED_LIBS_BUILD AND is_bundle)
+    elseif(APPLE AND NOT IOS AND _QT56_IS_SHARED_LIBS_BUILD AND is_bundle)
         # TODO: Consider handling non-bundle applications in the future using the generic cmake
         # runtime dependency feature.
         qt56_generate_deploy_script(${generate_args}
@@ -3191,7 +3199,7 @@ qt56_deploy_runtime_dependencies(
 ${common_deploy_args})
 ")
 
-    elseif(WIN32 AND QT6_IS_SHARED_LIBS_BUILD)
+    elseif(WIN32 AND _QT56_IS_SHARED_LIBS_BUILD)
         qt56_generate_deploy_script(${generate_args}
             CONTENT "
 qt56_deploy_runtime_dependencies(
@@ -3200,7 +3208,7 @@ qt56_deploy_runtime_dependencies(
 ${common_deploy_args})
 ")
 
-    elseif(UNIX AND NOT APPLE AND NOT ANDROID AND QT6_IS_SHARED_LIBS_BUILD
+    elseif(UNIX AND NOT APPLE AND NOT ANDROID AND _QT56_IS_SHARED_LIBS_BUILD
             AND NOT CMAKE_CROSSCOMPILING)
         qt56_generate_deploy_script(${generate_args}
             CONTENT "
@@ -3232,3 +3240,19 @@ ${common_deploy_args})
 
     set(${arg_OUTPUT_SCRIPT} "${deploy_script}" PARENT_SCOPE)
 endfunction()
+
+######################################
+
+# Initialize the deploy support!
+
+find_package(${_QT56} REQUIRED Core)
+
+get_target_property(_QT56CoreLibType ${_QT56}::Core TYPE)
+
+if (_QT56CoreLibType STREQUAL "SHARED_LIBRARY") 
+    set(_QT56_IS_SHARED_LIBS_BUILD TRUE)  
+else()
+    set(_QT56_IS_SHARED_LIBS_BUILD FALSE)
+endif()
+
+_qt56_internal_setup_deploy_support()

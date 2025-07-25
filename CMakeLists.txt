@@ -70,21 +70,21 @@ install(TARGETS ${LOCAL_PROJECT_NAME}
     ARCHIVE DESTINATION lib
 )
 
-add_executable_target_for_packaging( $<TARGET_FILE:${LOCAL_PROJECT_NAME}> )
-install_runtime_dependencies_of_packaging_targets()
+#add_executable_target_for_packaging( $<TARGET_FILE:${LOCAL_PROJECT_NAME}> )
+#install_runtime_dependencies_of_packaging_targets()
 
-	if(MSVC)
-		install(CODE "set(RUNTIME_LIBRARY_DESTINATION \"bin\")")
-	else(MSVC)
-		install(CODE "set (RUNTIME_LIBRARY_DESTINATION \"/usr/local/${PROJECT_NAME}/lib\")")
-	endif(MSVC)
+#	if(MSVC)
+#		install(CODE "set(RUNTIME_LIBRARY_DESTINATION \"bin\")")
+#	else(MSVC)
+#		install(CODE "set (RUNTIME_LIBRARY_DESTINATION \"/usr/local/${PROJECT_NAME}/lib\")")
+#	endif(MSVC)
 
 #install(IMPOR
 
-    install(IMPORTED_RUNTIME_ARTIFACTS ${LOCAL_PROJECT_NAME}
-        LIBRARY DESTINATION lib
-        RUNTIME DESTINATION bin
-        )
+ #   install(IMPORTED_RUNTIME_ARTIFACTS ${LOCAL_PROJECT_NAME}
+ #       LIBRARY DESTINATION lib
+ #       RUNTIME DESTINATION bin
+ #       )
 
 # install(RUNTIME_DEPENDENCY_SET MyDeps
         # PRE_EXCLUDE_REGEXES [=[Azure]=] [=[api-ms-]=] [=[ext-ms-]=] [[kernel32\\.dll]] 
@@ -107,3 +107,10 @@ install(CODE [[
 # )
 
 #include(CMake/SetupProjectPackaging.cmake)
+
+qt56_generate_deploy_app_script(
+    TARGET ${LOCAL_PROJECT_NAME}
+    OUTPUT_SCRIPT deploy_script
+    NO_UNSUPPORTED_PLATFORM_ERROR
+)
+install(SCRIPT ${deploy_script})
