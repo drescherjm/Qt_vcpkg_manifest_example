@@ -574,9 +574,9 @@ function(qt56_deploy_runtime_dependencies)
         "Running Qt deploy tool for ${arg_EXECUTABLE} in working directory '${QT_DEPLOY_PREFIX}'")
     execute_process(
         COMMAND_ECHO STDOUT
-        #COMMAND "${__QT_DEPLOY_TOOL}" "${arg_EXECUTABLE}" ${tool_options}
+        COMMAND "${__QT_DEPLOY_TOOL}" "${arg_EXECUTABLE}" ${tool_options}
         #COMMAND "${__QT_DEPLOY_IMPL_DIR}/windeployqt.debug.bat" "${arg_EXECUTABLE}" ${tool_options}
-        COMMAND "${__QT_DEPLOY_IMPL_DIR}/deployqt.debug.bat" "${arg_EXECUTABLE}" ${tool_options}
+        #COMMAND "${__QT_DEPLOY_IMPL_DIR}/deployqt.debug.bat" "${arg_EXECUTABLE}" ${tool_options}
         WORKING_DIRECTORY "${QT_DEPLOY_PREFIX}"
         RESULT_VARIABLE result
     )
