@@ -2436,12 +2436,18 @@ function(_qt56_internal_setup_deploy_support)
         set(__QT_DEPLOY_TOOL "${deploy_impl_dir}/deployqt.bat")
         set(__QT_DEPLOY_TOOL_debug "${deploy_impl_dir}/deployqt.debug.bat")
 
+        file(TO_NATIVE_PATH "${safe_target_file}" safe_target_file_native)
+        file(TO_NATIVE_PATH "${fallback}" fallback_native)
+
+        file(TO_NATIVE_PATH "${qtpaths_prefix_debug}" qtpaths_prefix_debug_native)
+        file(TO_NATIVE_PATH "${qtpaths_prefix}" qtpaths_prefix_native)
+
         file(GENERATE OUTPUT "$<IF:$<CONFIG:Debug>,${__QT_DEPLOY_TOOL_debug},${__QT_DEPLOY_TOOL}>" CONTENT 
 "@echo off
 setlocal enabledelayedexpansion
-set mypath=\"$<PATH:GET_PARENT_PATH,$<IF:${have_deploy_tool},${safe_target_file},${fallback}>>\"
+set mypath=\"$<PATH:GET_PARENT_PATH,$<IF:${have_deploy_tool},${safe_target_file_native},${fallback_native}>>\"
 set BAKCD=!CD!
-cd /D \"$<IF:$<CONFIG:Debug>,${qtpaths_prefix_debug},${qtpaths_prefix}>\"
+cd /D \"$<IF:$<CONFIG:Debug>,${qtpaths_prefix_debug_native},${qtpaths_prefix_native}>\"
 set PATH=!CD!;%PATH%
 cd /D \"%BAKCD%\"
 \"%mypath%\\windeployqt.exe\" %* $<IF:$<CONFIG:Debug>,--debug,> --compiler-runtime
