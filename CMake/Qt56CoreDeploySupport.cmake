@@ -7,7 +7,7 @@
 
 cmake_minimum_required(VERSION 3.16...3.21)
 
-function(qt56_deploy_qt56_conf qt_conf_absolute_path)
+function(qt56_deploy_qt_conf qt_conf_absolute_path)
     set(no_value_options "")
     set(single_value_options
         PREFIX
@@ -96,7 +96,7 @@ endfunction()
 if(NOT __QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
     function(qt_deploy_qt56_conf)
         if(__QT_DEFAULT_MAJOR_VERSION EQUAL 6)
-            qt56_deploy_qt56_conf(${ARGV})
+            qt56_deploy_qt_conf(${ARGV})
         else()
             message(FATAL_ERROR "qt_deploy_qt56_conf() is only available in Qt 6.")
         endif()
@@ -206,7 +206,7 @@ function(_qt56_internal_generic_deployqt)
         "${no_value_options}" "${single_value_options}" "${multi_value_options}"
     )
     if(arg_UNPARSED_ARGUMENTS)
-        message(FATAL_ERROR "Unparsed arguments: ${arg_UNPARSED_ARGUMENTS}")
+        message(WARNING "Unparsed arguments: ${arg_UNPARSED_ARGUMENTS}")
     endif()
 
     if(arg_VERBOSE OR __QT_DEPLOY_VERBOSE)
@@ -402,7 +402,7 @@ function(qt56_deploy_runtime_dependencies)
             string(REPEAT "../" ${path_count} rel_path)
             string(REGEX REPLACE "/+$" "" prefix "${rel_path}")
         endif()
-        qt56_deploy_qt56_conf("${QT_DEPLOY_PREFIX}/${exe_dir}/qt.conf"
+        qt56_deploy_qt_conf("${QT_DEPLOY_PREFIX}/${exe_dir}/qt.conf"
             PREFIX "${prefix}"
             BIN_DIR "${arg_BIN_DIR}"
             LIB_DIR "${arg_LIB_DIR}"
@@ -437,6 +437,16 @@ function(qt56_deploy_runtime_dependencies)
                 --qml-deploy-dir "${arg_QML_DIR}"
                 --translationdir "${QT_DEPLOY_TRANSLATIONS_DIR}"
             )
+        else()
+            if (EXISTS ${__QT_DEPLOY_TARGET_QMAKE_PATH})
+                #list(APPEND tool_options --verbose 2  --ignore-library-errors --no-translations)
+                list(APPEND tool_options --verbose 2  --no-translations)
+
+               #cmake_path(CONVERT "${__QT_DEPLOY_TARGET_QMAKE_DIR}" TO_NATIVE_PATH_LIST __native_prefix)
+
+               #set(_prefix_command "${CMAKE_COMMAND} -E env \"PATH=${__native_prefix};$ENV{PATH}\"")
+
+            endif()
         endif()
 
         if(NOT arg_NO_OVERWRITE)
@@ -485,6 +495,9 @@ function(qt56_deploy_runtime_dependencies)
         message(STATUS "Running generic Qt deploy tool on ${arg_EXECUTABLE}")
 
         if(NOT "${arg_DEPLOY_TOOL_OPTIONS}" STREQUAL "")
+
+            set(tool_options "")
+
             message(WARNING
                 "DEPLOY_TOOL_OPTIONS was specified but has no effect when using the generic "
                 "deployment tool."
@@ -533,29 +546,45 @@ function(qt56_deploy_runtime_dependencies)
         list(APPEND tool_options "${extra_binaries_option}${extra_binary}")
     endforeach()
 
+    if(__QT_DEPLOY_SYSTEM_NAME STREQUAL Windows)
+        # windeployqt5 misses some dependent dlls
+    	file(GET_RUNTIME_DEPENDENCIES
+			LIBRARIES ${extra_binary}
+			EXECUTABLES "${arg_EXECUTABLE}"
+			RESOLVED_DEPENDENCIES_VAR deps
+			UNRESOLVED_DEPENDENCIES_VAR unresolved
+			PRE_EXCLUDE_REGEXES "api-ms-" "ext-ms-" "kernel32\\.dll"
+		)
+
+		foreach(dep IN LISTS deps)
+			message( STATUS "Processing dependency: " ${dep})
+			file(INSTALL "${dep}"
+				DESTINATION ${CMAKE_INSTALL_PREFIX}/bin
+				FOLLOW_SYMLINK_CHAIN
+			)
+		endforeach()
+
+		list(LENGTH unresolved unresolved_count)
+		if(unresolved_count GREATER 0)
+			message(WARNING "Unresolved dependencies: ${unresolved}")
+		endif()
+    endif()
+
     message(STATUS
         "Running Qt deploy tool for ${arg_EXECUTABLE} in working directory '${QT_DEPLOY_PREFIX}'")
     execute_process(
         COMMAND_ECHO STDOUT
-        COMMAND "${__QT_DEPLOY_TOOL}" "${arg_EXECUTABLE}" ${tool_options}
+        #COMMAND "${__QT_DEPLOY_TOOL}" "${arg_EXECUTABLE}" ${tool_options}
+        #COMMAND "${__QT_DEPLOY_IMPL_DIR}/windeployqt.debug.bat" "${arg_EXECUTABLE}" ${tool_options}
+        COMMAND "${__QT_DEPLOY_IMPL_DIR}/deployqt.debug.bat" "${arg_EXECUTABLE}" ${tool_options}
         WORKING_DIRECTORY "${QT_DEPLOY_PREFIX}"
         RESULT_VARIABLE result
     )
     if(result)
-        message(FATAL_ERROR "Executing ${__QT_DEPLOY_TOOL} failed: ${result}")
+        message(FATAL_ERROR "Executing ${__QT_DEPLOY_TOOL} in folder ${QT_DEPLOY_PREFIX} failed: ${result}")
     endif()
 
 endfunction()
-
-if(NOT __QT_NO_CREATE_VERSIONLESS_FUNCTIONS)
-    function(qt_deploy_runtime_dependencies)
-        if(__QT_DEFAULT_MAJOR_VERSION EQUAL 6)
-            qt56_deploy_runtime_dependencies(${ARGV})
-        else()
-            message(FATAL_ERROR "qt_deploy_runtime_dependencies() is only available in Qt 6.")
-        endif()
-    endfunction()
-endif()
 
 function(_qt56_internal_show_skip_runtime_deploy_message qt_build_type_string)
     set(no_value_options "")

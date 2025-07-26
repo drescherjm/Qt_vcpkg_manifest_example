@@ -114,5 +114,6 @@ qt56_generate_deploy_app_script(
     TARGET ${LOCAL_PROJECT_NAME}
     OUTPUT_SCRIPT deploy_script
     NO_UNSUPPORTED_PLATFORM_ERROR
+	DEPLOY_TOOL_OPTIONS --no-angle
 )
 install(SCRIPT ${deploy_script})

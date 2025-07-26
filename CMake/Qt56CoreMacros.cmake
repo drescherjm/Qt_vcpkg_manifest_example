@@ -2403,6 +2403,14 @@ function(_qt56_internal_setup_deploy_support)
         endif()
     endif()
 
+    if (QT_VERSION_MAJOR EQUAL 6)
+        set(qtpaths_prefix "${_QT56_INSTALL_PREFIX}/tools/Qt6/bin")
+        set(qtpaths_prefix_debug "${_QT56_INSTALL_PREFIX}/tools/Qt6/debug/bin")
+    else()
+        set(qtpaths_prefix "${_QT56_INSTALL_PREFIX}/tools/qt5/bin")
+        set(qtpaths_prefix_debug "${_QT56_INSTALL_PREFIX}/tools/qt5/debug/bin")
+    endif()
+
     # In the generator expression logic below, we need safe_target_file because
     # CMake evaluates expressions in both the TRUE and FALSE branches of $<IF:...>.
     # We still need a target to give to $<TARGET_FILE:...> when we have no deploy
@@ -2424,7 +2432,24 @@ function(_qt56_internal_setup_deploy_support)
         set(have_deploy_tool "$<BOOL:${target_if_exists}>")
         set(safe_target_file
             "$<TARGET_FILE:$<IF:${have_deploy_tool},${target_if_exists},${target}>>")
-        set(__QT_DEPLOY_TOOL "$<IF:${have_deploy_tool},${safe_target_file},${fallback}>")
+
+        set(__QT_DEPLOY_TOOL "${deploy_impl_dir}/deployqt.bat")
+        set(__QT_DEPLOY_TOOL_debug "${deploy_impl_dir}/deployqt.debug.bat")
+
+        file(GENERATE OUTPUT "$<IF:$<CONFIG:Debug>,${__QT_DEPLOY_TOOL_debug},${__QT_DEPLOY_TOOL}>" CONTENT 
+"@echo off
+setlocal enabledelayedexpansion
+set mypath=\"$<PATH:GET_PARENT_PATH,$<IF:${have_deploy_tool},${safe_target_file},${fallback}>>\"
+set BAKCD=!CD!
+cd /D \"$<IF:$<CONFIG:Debug>,${qtpaths_prefix_debug},${qtpaths_prefix}>\"
+set PATH=!CD!;%PATH%
+cd /D \"%BAKCD%\"
+\"%mypath%\\windeployqt.exe\" %* $<IF:$<CONFIG:Debug>,--debug,> --compiler-runtime
+endlocal
+"
+        )
+
+        #set(__QT_DEPLOY_TOOL "$<IF:${have_deploy_tool},${safe_target_file},${fallback}>")
     elseif(UNIX AND NOT APPLE AND NOT ANDROID AND NOT CMAKE_CROSSCOMPILING)
         set(__QT_DEPLOY_TOOL "GRD")
     else()
@@ -2506,14 +2531,6 @@ function(_qt56_internal_setup_deploy_support)
     else()
         set(qt_paths_ext "")
     endif()
-
-    if (QT_VERSION_MAJOR EQUAL 6)
-        set(qtpaths_prefix "${_QT56_INSTALL_PREFIX}/tools/Qt6/bin")
-        set(qtpaths_prefix_debug "${_QT56_INSTALL_PREFIX}/tools/Qt6/debug/bin")
-    else()
-        set(qtpaths_prefix "${_QT56_INSTALL_PREFIX}/tools/qt5/bin")
-        set(qtpaths_prefix_debug "${_QT56_INSTALL_PREFIX}/tools/qt5/debug/bin")
-    endif()
     
     get_property(qt_major_version TARGET "${target}" PROPERTY INTERFACE_QT_MAJOR_VERSION)
 
@@ -2592,7 +2609,7 @@ endif()
 # These are internal implementation details. They may be removed at any time.
 set(__QT_DEPLOY_SYSTEM_NAME \"${CMAKE_SYSTEM_NAME}\")
 set(__QT_DEPLOY_IS_SHARED_LIBS_BUILD \"${_QT56_IS_SHARED_LIBS_BUILD}\")
-set(__QT_DEPLOY_TOOL \"${__QT_DEPLOY_TOOL}\")
+set(__QT_DEPLOY_TOOL \"$<IF:$<AND:$<CONFIG:Debug>,${is_multi_config}>,${__QT_DEPLOY_TOOL_debug},${__QT_DEPLOY_TOOL}>\")
 set(__QT_DEPLOY_IMPL_DIR \"${deploy_impl_dir}\")
 set(__QT_DEPLOY_VERBOSE \"${QT_ENABLE_VERBOSE_DEPLOYMENT}\")
 set(__QT_CMAKE_EXPORT_NAMESPACE \"${QT_CMAKE_EXPORT_NAMESPACE}\")
@@ -2609,6 +2626,7 @@ set(__QT_DEPLOY_QT_INSTALL_PLUGINS \"${_QT56_INSTALL_PLUGINS}\")
 set(__QT_DEPLOY_QT_INSTALL_TRANSLATIONS \"${QT6_INSTALL_TRANSLATIONS}\")
 set(__QT_DEPLOY_TARGET_QT_PATHS_PATH \"$<IF:$<CONFIG:Debug>,${target_qtpaths_path_debug},${target_qtpaths_path}>\")
 set(__QT_DEPLOY_TARGET_QMAKE_PATH \"$<IF:$<CONFIG:Debug>,${target_qmake_path_debug},${target_qmake_path}>\")
+set(__QT_DEPLOY_TARGET_QMAKE_DIR \"$<IF:$<CONFIG:Debug>,${qtpaths_prefix_debug},${qtpaths_prefix}>\")
 set(__QT_DEPLOY_PLUGINS \"\")
 set(__QT_DEPLOY_MUST_ADJUST_PLUGINS_RPATH \"${must_adjust_plugins_rpath}\")
 set(__QT_DEPLOY_USE_PATCHELF \"${QT_DEPLOY_USE_PATCHELF}\")
