@@ -409,8 +409,7 @@ macro(_qt56_import_plugin target plugin)
     endif()
 
     if(NOT TARGET "${_final_plugin_name}")
-        message(
-            "Warning: plug-in ${_final_plugin_name} is not known to the current Qt installation.")
+        message(WARNING "Warning: plug-in ${_final_plugin_name} is not known to the current Qt installation.")
     else()
         get_target_property(_plugin_class_name "${_final_plugin_name}" QT_PLUGIN_CLASS_NAME)
         if(_plugin_class_name)
