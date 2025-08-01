@@ -117,3 +117,39 @@ qt56_generate_deploy_app_script(
 	DEPLOY_TOOL_OPTIONS --no-angle
 )
 install(SCRIPT ${deploy_script})
+
+
+# ─── CPack packaging setup ───────────────────────────────
+
+# Basic CPack settings
+set(CPACK_PACKAGE_NAME "${PROJECT_NAME}")
+set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+set(CPACK_PACKAGE_CONTACT "you@example.com")
+set(CPACK_PACKAGE_VENDOR "Your Name or Company")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Example Qt app packaged via CPack")
+
+if(WIN32)
+  # NSIS installer on Windows
+  set(CPACK_GENERATOR "NSIS")
+  set(CPACK_NSIS_MODIFY_PATH ON)
+  set(CPACK_NSIS_DISPLAY_NAME "${PROJECT_NAME} Installer")
+  set(CPACK_NSIS_PACKAGE_NAME "${PROJECT_NAME}")
+  set(CPACK_PACKAGE_INSTALL_DIRECTORY "${PROJECT_NAME}/Package")
+  #set(CPACK_NSIS_INSTALLED_ICON_NAME "bin\\\\myapp.exe")
+elseif(UNIX AND EXISTS "/etc/debian_version")
+  # DEB package
+  set(CMAKE_INSTALL_PREFIX /usr/local/${PROJECT_NAME})
+  set(CPACK_PACKAGING_INSTALL_PREFIX /usr/local/${PROJECT_NAME})
+  set(CPACK_GENERATOR "DEB")
+  set(CPACK_DEBIAN_PACKAGE_MAINTAINER "you@example.com")
+  set(CPACK_DEBIAN_PACKAGE_DEPENDS "libc6 (>= 2.29)")
+  set(CPACK_DEBIAN_PACKAGE_SECTION "utils")
+elseif(UNIX AND EXISTS "/etc/redhat-release")
+  # RPM package
+  set(CPACK_GENERATOR "RPM")
+  set(CPACK_RPM_PACKAGE_LICENSE "MIT")
+  set(CPACK_RPM_PACKAGE_RELEASE 1)
+  set(CPACK_RPM_PACKAGE_GROUP "Applications/Utilities")
+endif()
+
+include(CPack)
