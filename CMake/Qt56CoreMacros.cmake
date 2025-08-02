@@ -15,6 +15,10 @@ set_property(GLOBAL PROPERTY __qt56_core_macros_module_base_dir "${CMAKE_CURRENT
 set(_QT56 Qt${QT_VERSION_MAJOR})
 set(QT_CMAKE_EXPORT_NAMESPACE ${_QT56})
 
+if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+   find_package(linuxdeployqt REQUIRED)
+endif()
+
 # Other includes ported from Qt6
 include(${CMAKE_CURRENT_LIST_DIR}/Qt56PublicTargetHelpers.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/Qt56PublicWalkLibsHelpers.cmake)
@@ -2389,12 +2393,12 @@ function(_qt56_internal_setup_deploy_support)
 
     # Make sure to look under the Qt bin dir with find_program, rather than randomly picking up
     # a deployqt tool in the system.
-    # QT6_INSTALL_PREFIX is not set during Qt build, so add the hints conditionally.
+    # _QT56_INSTALL_PREFIX is not set during Qt build, so add the hints conditionally.
     set(find_program_hints)
 
     if (QT_VERSION_MAJOR EQUAL 6)
-        if(QT6_INSTALL_PREFIX)
-            set(find_program_hints HINTS ${QT6_INSTALL_PREFIX}/${QT6_INSTALL_BINS})
+        if(_QT56_INSTALL_PREFIX)
+            set(find_program_hints HINTS ${_QT56_INSTALL_PREFIX}/${QT6_INSTALL_BINS})
         endif()
     else()
         if (_qt5_install_prefix)
@@ -2478,12 +2482,12 @@ endlocal
     _qt56_internal_add_deploy_support("${CMAKE_CURRENT_LIST_DIR}/Qt56CoreDeploySupport.cmake")
 
     set(deploy_ignored_lib_dirs "")
-    if(__QT_DEPLOY_TOOL STREQUAL "GRD" AND NOT "${QT6_INSTALL_PREFIX}" STREQUAL "")
+    if(__QT_DEPLOY_TOOL STREQUAL "GRD" AND NOT "${_QT56_INSTALL_PREFIX}" STREQUAL "")
         # Set up the directories we want to ignore when running file(GET_RUNTIME_DEPENDENCIES).
         # If the Qt prefix is the root of one of those directories, don't ignore that directory.
         # For example, if Qt's installation prefix is /usr, then we don't want to ignore /usr/lib.
         foreach(link_dir IN LISTS CMAKE_CXX_IMPLICIT_LINK_DIRECTORIES)
-            file(RELATIVE_PATH relative_dir "${QT6_INSTALL_PREFIX}" "${link_dir}")
+            file(RELATIVE_PATH relative_dir "${_QT56_INSTALL_PREFIX}" "${link_dir}")
             if(relative_dir STREQUAL "")
                 # The Qt prefix is exactly ${link_dir}.
                 continue()

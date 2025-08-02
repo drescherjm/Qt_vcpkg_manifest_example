@@ -1,0 +1,10 @@
+{
+  "name": "linuxdeployqt",
+  "version": "10.1.4",
+  "description": "linuxdeployqt makes Linux desktop applications as portable as AppImages.",
+  "homepage": "https://github.com/drescherjm/linuxdeployqt",
+  "license": "LGPL-3.0-or-later",
+  "dependencies": [
+    { "name": "vcpkg-cmake", "host": true }
+  ]
+}
