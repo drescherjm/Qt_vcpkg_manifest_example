@@ -416,14 +416,6 @@ function(qt56_deploy_runtime_dependencies)
         )
     endif()
 
-    # Here we would call linuxdeployqt
-    if(__QT_DEPLOY_SYSTEM_NAME STREQUAL Linux)
-            cmake_path(GET arg_EXECUTABLE FILENAME __executable_file_name)
-
-            message(AUTHOR_WARNING "binFolder=${QT_DEPLOY_PREFIX}/${exe_dir} EXE_PATH=${__executable_file_name}")
-    endif()
-
-
     set(extra_binaries_option "")
     set(tool_options "")
 
@@ -545,6 +537,25 @@ function(qt56_deploy_runtime_dependencies)
             PLUGINS_DIR "${arg_PLUGINS_DIR}"
             ${tool_options}
         )
+
+            # Here we would call linuxdeployqt
+        if(__QT_DEPLOY_SYSTEM_NAME STREQUAL Linux)
+                cmake_path(GET arg_EXECUTABLE FILENAME __executable_file_name)
+
+                message(AUTHOR_WARNING "binFolder=${QT_DEPLOY_PREFIX}/${exe_dir} EXE_PATH=${__executable_file_name}")
+
+                if (NOT ${__QT_SECONDARY_DEPLOY_TOOL} STREQUAL "" AND NOT ${__QT_DEPLOY_TARGET_QMAKE_PATH} STREQUAL "")
+                        execute_process(
+                            COMMAND_ECHO STDOUT
+                            COMMAND "${__QT_SECONDARY_DEPLOY_TOOL}" "${QT_DEPLOY_PREFIX}/${exe_dir}/${__executable_file_name}" -qmake=${__QT_DEPLOY_TARGET_QMAKE_PATH}
+                            WORKING_DIRECTORY "${QT_DEPLOY_PREFIX}"
+                            RESULT_VARIABLE result
+    )
+                endif()
+
+        endif()
+
+
         return()
     endif()
 

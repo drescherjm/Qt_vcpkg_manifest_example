@@ -2461,6 +2461,16 @@ endlocal
         #set(__QT_DEPLOY_TOOL "$<IF:${have_deploy_tool},${safe_target_file},${fallback}>")
     elseif(UNIX AND NOT APPLE AND NOT ANDROID AND NOT CMAKE_CROSSCOMPILING)
         set(__QT_DEPLOY_TOOL "GRD")
+
+        find_program(LINUXDEPLOYQT_EXECUTABLE linuxdeployqt
+            ${find_program_hints})
+        set(fallback "$<$<BOOL:${LINUXDEPLOYQT_EXECUTABLE}>:${LINUXDEPLOYQT_EXECUTABLE}>")
+        set(target_if_exists "$<TARGET_NAME_IF_EXISTS:${QT_CMAKE_EXPORT_NAMESPACE}::linuxdeployqt>")
+        set(have_deploy_tool "$<BOOL:${target_if_exists}>")
+        set(safe_target_file
+            "$<TARGET_FILE:$<IF:${have_deploy_tool},${target_if_exists},${target}>>")
+        set(__QT_SECONDARY_DEPLOY_TOOL "$<IF:${have_deploy_tool},${safe_target_file},${fallback}>")
+
     else()
         # Android is handled as a build target, not via this install-based approach.
         # Therefore, we don't consider androiddeployqt here.
@@ -2619,6 +2629,7 @@ endif()
 set(__QT_DEPLOY_SYSTEM_NAME \"${CMAKE_SYSTEM_NAME}\")
 set(__QT_DEPLOY_IS_SHARED_LIBS_BUILD \"${_QT56_IS_SHARED_LIBS_BUILD}\")
 set(__QT_DEPLOY_TOOL \"$<IF:$<AND:$<CONFIG:Debug>,${is_multi_config}>,${__QT_DEPLOY_TOOL_debug},${__QT_DEPLOY_TOOL}>\")
+set(__QT_SECONDARY_DEPLOY_TOOL \"${__QT_SECONDARY_DEPLOY_TOOL}\")
 set(__QT_DEPLOY_IMPL_DIR \"${deploy_impl_dir}\")
 set(__QT_DEPLOY_VERBOSE \"${QT_ENABLE_VERBOSE_DEPLOYMENT}\")
 set(__QT_CMAKE_EXPORT_NAMESPACE \"${QT_CMAKE_EXPORT_NAMESPACE}\")
