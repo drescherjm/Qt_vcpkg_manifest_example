@@ -8,7 +8,10 @@
 cmake_minimum_required(VERSION 3.16...3.21)
 
 function(qt56_deploy_qt_conf qt_conf_absolute_path)
-    set(no_value_options "")
+
+message(AUTHOR_WARNING qt_conf_absolute_path=${qt_conf_absolute_path})
+
+set(no_value_options "")
     set(single_value_options
         PREFIX
         DOC_DIR
@@ -356,6 +359,8 @@ function(qt56_deploy_runtime_dependencies)
         "${no_value_options}" "${single_value_options}" "${multi_value_options}"
     )
 
+    message(AUTHOR_WARNING EXECUTABLE=${arg_EXECUTABLE})
+
     if(arg_UNPARSED_ARGUMENTS)
         message(FATAL_ERROR "Unparsed arguments: ${arg_UNPARSED_ARGUMENTS}")
     endif()
@@ -410,6 +415,14 @@ function(qt56_deploy_runtime_dependencies)
             QML_DIR "${arg_QML_DIR}"
         )
     endif()
+
+    # Here we would call linuxdeployqt
+    if(__QT_DEPLOY_SYSTEM_NAME STREQUAL Linux)
+            cmake_path(GET arg_EXECUTABLE FILENAME __executable_file_name)
+
+            message(AUTHOR_WARNING "binFolder=${QT_DEPLOY_PREFIX}/${exe_dir} EXE_PATH=${__executable_file_name}")
+    endif()
+
 
     set(extra_binaries_option "")
     set(tool_options "")

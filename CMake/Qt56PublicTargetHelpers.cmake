@@ -127,18 +127,30 @@ function(__qt56_internal_process_dependency_object_libraries target)
     # line.
     # So circular dependencies between static libraries and object files are resolved and no need
     # to call the finalizer code.
-    if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.21)
+
+    message( AUTHOR_WARNING "__qt56_internal_process_dependency_object_libraries ${target}")
+
+    if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.21 AND NOT QT_VERSION_MAJOR EQUAL 5)
         return()
     endif()
+
     get_target_property(processed ${target} _qt56_object_libraries_finalizer_processed)
     if(processed)
         return()
     endif()
     set_target_properties(${target} PROPERTIES _qt56_object_libraries_finalizer_processed TRUE)
 
-    get_target_property(qt_link_order_matters
-        ${QT_CMAKE_EXPORT_NAMESPACE}::Platform _qt56_link_order_matters
-    )
+    if (TARGET ${QT_CMAKE_EXPORT_NAMESPACE}::Platform)
+        get_target_property(qt_link_order_matters
+            ${QT_CMAKE_EXPORT_NAMESPACE}::Platform _qt56_link_order_matters
+        )
+    else()
+        if (MSVC)
+            set(qt_link_order_matters FALSE)
+        else()
+            set(qt_link_order_matters TRUE)
+        endif()
+    endif()
     __qt56_internal_check_finalizer_mode(${target}
         use_finalizer_mode
         object_libraries
@@ -154,6 +166,9 @@ function(__qt56_internal_process_dependency_object_libraries target)
 endfunction()
 
 function(__qt56_internal_collect_dependency_object_libraries target out_var)
+
+    message( AUTHOR_WARNING "__qt56_internal_collect_dependency_object_libraries ${target}")
+
     set_property(GLOBAL PROPERTY _qt56_processed_object_libraries "")
 
     __qt56_internal_collect_object_libraries_recursively(object_libraries ${target} ${target})
@@ -178,6 +193,9 @@ function(__qt56_internal_collect_dependency_object_libraries target out_var)
 endfunction()
 
 function(__qt56_internal_collect_dependency_plugin_object_libraries target plugin_targets out_var)
+
+    message(AUTHOR_WARNING plugin_targets=${plugin_targets})
+
     __qt56_internal_get_cmp0099_genex_check(cmp0099_check)
     set(plugin_objects "")
     foreach(plugin_target IN LISTS plugin_targets)
