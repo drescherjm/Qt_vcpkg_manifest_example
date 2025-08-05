@@ -143,6 +143,7 @@ elseif(UNIX AND EXISTS "/etc/debian_version")
   set(CPACK_GENERATOR "DEB")
   set(CPACK_DEBIAN_PACKAGE_MAINTAINER "you@example.com")
   set(CPACK_DEBIAN_PACKAGE_DEPENDS "libc6 (>= 2.29)")
+  set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
   set(CPACK_DEBIAN_PACKAGE_SECTION "utils")
 elseif(UNIX AND EXISTS "/etc/redhat-release")
   # RPM package
