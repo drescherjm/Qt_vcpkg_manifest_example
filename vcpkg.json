@@ -9,7 +9,10 @@
           "qt5-base", "qt5-tools",
           {
               "name": "linuxdeployqt",
-              "platform": "linux"
+              "platform": "linux",
+              "features": [
+                "qt5"
+              ]
           }
       ]
     },
@@ -19,7 +22,10 @@
           "qtbase", "qttools",
           {
               "name": "linuxdeployqt",
-              "platform": "linux"
+              "platform": "linux",
+              "features": [
+                "qt6"
+              ]
           }
       ]
     }

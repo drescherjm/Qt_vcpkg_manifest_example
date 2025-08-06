@@ -2349,18 +2349,18 @@ function(_qt56_internal_setup_deploy_support)
         return()
     endif()
 
-    # Always set QT_DEPLOY_SUPPORT in the caller's scope, even if we've generated
+    # Always set QT56_DEPLOY_SUPPORT in the caller's scope, even if we've generated
     # the deploy support file in a previous call. The project may be calling
     # find_package() from sibling directories with separate variable scopes.
     _qt56_internal_get_deploy_impl_dir(deploy_impl_dir)
 
     get_cmake_property(is_multi_config GENERATOR_IS_MULTI_CONFIG)
     if(is_multi_config)
-        set(QT_DEPLOY_SUPPORT "${deploy_impl_dir}/QtDeploySupport-$<CONFIG>.cmake")
+        set(QT56_DEPLOY_SUPPORT "${deploy_impl_dir}/Qt56DeploySupport-$<CONFIG>.cmake")
     else()
-        set(QT_DEPLOY_SUPPORT "${deploy_impl_dir}/QtDeploySupport.cmake")
+        set(QT56_DEPLOY_SUPPORT "${deploy_impl_dir}/Qt56DeploySupport.cmake")
     endif()
-    set(QT_DEPLOY_SUPPORT "${QT_DEPLOY_SUPPORT}" PARENT_SCOPE)
+    set(QT56_DEPLOY_SUPPORT "${QT56_DEPLOY_SUPPORT}" PARENT_SCOPE)
 
     get_property(have_generated_file GLOBAL PROPERTY _qt56_have_generated_deploy_support)
     if(have_generated_file)
@@ -2379,9 +2379,9 @@ function(_qt56_internal_setup_deploy_support)
     # The call is deferred to have all targets of the projects available.
     if(CMAKE_VERSION GREATER_EQUAL "3.19.0")
         if(is_multi_config)
-            set(targets_file "${deploy_impl_dir}/QtDeployTargets-$<CONFIG>.cmake")
+            set(targets_file "${deploy_impl_dir}/Qt56DeployTargets-$<CONFIG>.cmake")
         else()
-            set(targets_file "${deploy_impl_dir}/QtDeployTargets.cmake")
+            set(targets_file "${deploy_impl_dir}/Qt56DeployTargets.cmake")
         endif()
         cmake_language(EVAL CODE
             "cmake_language(DEFER
@@ -2580,6 +2580,13 @@ endlocal
         endif()
     endif()
 
+    if (NOT target_qtpaths_path)
+        get_target_property(target_qtpaths_path ${_QT56}::qtpaths LOCATION_RELEASE)
+        get_target_property(target_qtpaths_path_debug ${_QT56}::qtpaths LOCATION_DEBUG)
+    endif()
+
+    message(STATUS target_qtpaths_path=${target_qtpaths_path})
+
     if(NOT target_qtpaths_path)
         message(FATAL_ERROR "No qtpaths executable found for deployment purposes.")
     endif()
@@ -2590,9 +2597,11 @@ endlocal
     else()
         set(target_qmake_path "")
         set(target_qmake_path_debug "")
+        get_target_property(target_qmake_path ${_QT56}::qmake LOCATION_RELEASE)
+        get_target_property(target_qmake_path_debug ${_QT56}::qmake LOCATION_DEBUG)
     endif()
 
-    file(GENERATE OUTPUT "${QT_DEPLOY_SUPPORT}" CONTENT
+    file(GENERATE OUTPUT "${QT56_DEPLOY_SUPPORT}" CONTENT
 "cmake_minimum_required(VERSION 3.16...3.21)
 
 # These are part of the public API. Projects should use them to provide a
@@ -3139,7 +3148,7 @@ function(qt56_generate_deploy_script)
     set(${arg_OUTPUT_SCRIPT} "${deploy_script}" PARENT_SCOPE)
 
     _qt56_internal_get_i18n_catalogs_for_modules(catalogs ${QT_ALL_MODULES_FOUND_VIA_FIND_PACKAGE})
-    set(boiler_plate "include(\"${QT_DEPLOY_SUPPORT}\")
+    set(boiler_plate "include(\"${QT56_DEPLOY_SUPPORT}\")
 include(\"\${CMAKE_CURRENT_LIST_DIR}/${arg_TARGET}-plugins${config_infix}.cmake\" OPTIONAL)
 set(__QT_DEPLOY_I18N_CATALOGS \"${catalogs}\")
 ")
