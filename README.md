@@ -4,15 +4,17 @@ The purpose of this repository is to build a small example project that uses vcp
 **Note: Although macOS is listed as supported I have no access to a macOS device so I can not test.**
 
 ## Initial Setup on all OSs
-1. I first created a projects folder in an appropriate location on each operating system I wanted to use.
-2. I cloned vcpkg to the projects/vcpkg folder.
-3. I installed the [GitHub CLI Utility](https://cli.github.com/)
+1. Create a projects folder in an appropriate location on each operating system you want to use.
+2. Clone [vcpkg](https://github.com/microsoft/vcpkg) to the projects/vcpkg folder. 
+3. Open a terminal / shell and change directory to the projects/vcpkg folder.
+4. Execute the bootstrap script in the vcpkg folder. On Windows this file is **bootstrap-vcpkg.bat** and its **bootstrap-vcpkg.sh** on all other supported OSs. 
+5. I installed the [GitHub CLI Utility](https://cli.github.com/)
 
 ## Next clone this repository
 1. Open a terminal / shell and change directory to the folder you created for your projects
-2. Type gh 
-
-You can install the gh GitHub CLI client for that 
+2. Type **gh repo clone drescherjm/Qt_vcpkg_manifest_example** to clone this repository. This will create a projects/Qt_vcpkg_manifest_example folder.
+   
+## Now 
 
 I first cloned vcpkg to the parent folder of this project so that parent/vcpkg exists.
 
