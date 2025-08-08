@@ -2449,6 +2449,10 @@ function(_qt56_internal_setup_deploy_support)
 "@echo off
 setlocal enabledelayedexpansion
 set mypath=\"$<PATH:GET_PARENT_PATH,$<IF:${have_deploy_tool},${safe_target_file_native},${fallback_native}>>\"
+
+:: Replace forward slashes with backslashes - CMake 4.0 has support for converting to native path in a generator expression however I want to support older CMake versions.
+set \"mypath=!mypath:/=\\!\"
+
 set BAKCD=!CD!
 cd /D \"$<IF:$<CONFIG:Debug>,${qtpaths_prefix_debug_native},${qtpaths_prefix_native}>\"
 set PATH=!CD!;%PATH%

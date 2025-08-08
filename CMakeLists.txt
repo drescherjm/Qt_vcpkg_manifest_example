@@ -63,49 +63,18 @@ install(TARGETS ${LOCAL_PROJECT_NAME}
     ARCHIVE DESTINATION lib
 )
 
-#add_executable_target_for_packaging( $<TARGET_FILE:${LOCAL_PROJECT_NAME}> )
-#install_runtime_dependencies_of_packaging_targets()
+if (QT_VERSION_MAJOR EQUAL 5)
+	set( _QT56_DEPLOY_TOOL_OPTIONS "--no-angle")
+else()
+	set( _QT56_DEPLOY_TOOL_OPTIONS "")
+endif()
 
-#	if(MSVC)
-#		install(CODE "set(RUNTIME_LIBRARY_DESTINATION \"bin\")")
-#	else(MSVC)
-#		install(CODE "set (RUNTIME_LIBRARY_DESTINATION \"/usr/local/${PROJECT_NAME}/lib\")")
-#	endif(MSVC)
-
-#install(IMPOR
-
- #   install(IMPORTED_RUNTIME_ARTIFACTS ${LOCAL_PROJECT_NAME}
- #       LIBRARY DESTINATION lib
- #       RUNTIME DESTINATION bin
- #       )
-
-# install(RUNTIME_DEPENDENCY_SET MyDeps
-        # PRE_EXCLUDE_REGEXES [=[Azure]=] [=[api-ms-]=] [=[ext-ms-]=] [[kernel32\\.dll]] 
-        # POST_EXCLUDE_REGEXES [=[Azure]=] [=[.*system32\\/.*\\.dll]=] 
-		# POST_INCLUDE_FILES AzureAttestManager.dll wpaxholder.dll PdmUtilities.dll AzureAttestNormal.dll
-# )
-
-install(CODE [[
-	message(WARNING "Install prefix: ${CMAKE_INSTALL_PREFIX}")
-	]]
-)
-
-#FILE(GLOB MY_INCLUDES_H "${PROJECT_SOURCE_DIR}/include/*.h")
-
-
-# install(CODE [[ 
-	# file( GLOB MY_SHARED_LIBRARIES "$<TARGET_FILE_DIR:vcpkg_qt_manifest_mode_example>/*.dll" ) 
-	# message( WARNING MY_SHARED_LIBRARIES=${MY_SHARED_LIBRARIES})
-	# ]]
-# )
-
-#include(CMake/SetupProjectPackaging.cmake)
 
 qt56_generate_deploy_app_script(
     TARGET ${LOCAL_PROJECT_NAME}
     OUTPUT_SCRIPT deploy_script
     NO_UNSUPPORTED_PLATFORM_ERROR
-	DEPLOY_TOOL_OPTIONS --no-angle
+	DEPLOY_TOOL_OPTIONS ${_QT56_DEPLOY_TOOL_OPTIONS}
 )
 install(SCRIPT ${deploy_script})
 
