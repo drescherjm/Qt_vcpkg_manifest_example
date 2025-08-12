@@ -34,7 +34,13 @@ include(CMake/Qt56CoreMacros.cmake)
 
 qt56_standard_project_setup()
 
-qt56_add_executable(${LOCAL_PROJECT_NAME} main.cpp)
+if (WIN32)
+set (_QT56_EXECUTABLE_OPTIONS "WIN32")
+elseif(APPLE)
+set (_QT56_EXECUTABLE_OPTIONS "MACOSX_BUNDLE")
+endif()
+
+qt56_add_executable(${LOCAL_PROJECT_NAME} ${_QT56_EXECUTABLE_OPTIONS} main.cpp)
 
 target_link_libraries(${LOCAL_PROJECT_NAME} PRIVATE ${APP_QT_TARGETS})
 
@@ -54,8 +60,6 @@ if (QT_VERSION_MAJOR EQUAL 6)
 	endif()
 endif()
 
-#include(CMake/InstallTargetRuntimeDependencies.cmake)
-
 install(TARGETS ${LOCAL_PROJECT_NAME}
 	RUNTIME_DEPENDENCY_SET MyDeps
     RUNTIME DESTINATION bin
@@ -69,7 +73,6 @@ else()
 	set( _QT56_DEPLOY_TOOL_OPTIONS "")
 endif()
 
-
 qt56_generate_deploy_app_script(
     TARGET ${LOCAL_PROJECT_NAME}
     OUTPUT_SCRIPT deploy_script
@@ -77,7 +80,6 @@ qt56_generate_deploy_app_script(
 	DEPLOY_TOOL_OPTIONS ${_QT56_DEPLOY_TOOL_OPTIONS}
 )
 install(SCRIPT ${deploy_script})
-
 
 # ─── CPack packaging setup ───────────────────────────────
 
