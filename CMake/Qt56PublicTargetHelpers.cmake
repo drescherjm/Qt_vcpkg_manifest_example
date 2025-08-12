@@ -128,7 +128,7 @@ function(__qt56_internal_process_dependency_object_libraries target)
     # So circular dependencies between static libraries and object files are resolved and no need
     # to call the finalizer code.
 
-    message( AUTHOR_WARNING "__qt56_internal_process_dependency_object_libraries ${target}")
+    #message( AUTHOR_WARNING "__qt56_internal_process_dependency_object_libraries ${target}")
 
     if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.21 AND NOT QT_VERSION_MAJOR EQUAL 5)
         return()
@@ -167,7 +167,7 @@ endfunction()
 
 function(__qt56_internal_collect_dependency_object_libraries target out_var)
 
-    message( AUTHOR_WARNING "__qt56_internal_collect_dependency_object_libraries ${target}")
+    #message( AUTHOR_WARNING "__qt56_internal_collect_dependency_object_libraries ${target}")
 
     set_property(GLOBAL PROPERTY _qt56_processed_object_libraries "")
 
@@ -194,7 +194,9 @@ endfunction()
 
 function(__qt56_internal_collect_dependency_plugin_object_libraries target plugin_targets out_var)
 
-    message(AUTHOR_WARNING plugin_targets=${plugin_targets})
+    if (__QT_DEPLOY_VERBOSE) 
+        message(NOTICE "Setting up the following plugin targets:${plugin_targets}")
+    endif()
 
     __qt56_internal_get_cmp0099_genex_check(cmp0099_check)
     set(plugin_objects "")
