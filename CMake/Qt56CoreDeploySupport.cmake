@@ -10,7 +10,7 @@ cmake_minimum_required(VERSION 3.16...3.21)
 function(qt56_deploy_qt_conf qt_conf_absolute_path)
 
 if (__QT_DEPLOY_VERBOSE) 
-    message(NOTICE qt_conf_absolute_path=${qt_conf_absolute_path})
+    message(qt_conf_absolute_path=${qt_conf_absolute_path})
 endif()
 
 set(no_value_options "")
@@ -362,7 +362,7 @@ function(qt56_deploy_runtime_dependencies)
     )
 
     if (__QT_DEPLOY_VERBOSE) 
-        message(NOTICE "Deploying the following executable: ${arg_EXECUTABLE}")
+        message("\nDeploying the following executable: ${arg_EXECUTABLE}")
     endif()
 
     if(arg_UNPARSED_ARGUMENTS)
@@ -553,7 +553,7 @@ function(qt56_deploy_runtime_dependencies)
                 if (NOT ${__QT_SECONDARY_DEPLOY_TOOL} STREQUAL "" AND NOT ${__QT_DEPLOY_TARGET_QMAKE_PATH} STREQUAL "")
                          
                         if (__QT_DEPLOY_VERBOSE) 
-                            message("Using the linuxdeployqt utility to support plugins: ${__QT_SECONDARY_DEPLOY_TOOL}")
+                            message("\nUsing the linuxdeployqt utility to support plugins: ${__QT_SECONDARY_DEPLOY_TOOL}")
                         endif()
                     
                         execute_process(
