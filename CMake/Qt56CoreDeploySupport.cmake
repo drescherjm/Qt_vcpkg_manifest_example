@@ -551,6 +551,11 @@ function(qt56_deploy_runtime_dependencies)
                 #endif()
 
                 if (NOT ${__QT_SECONDARY_DEPLOY_TOOL} STREQUAL "" AND NOT ${__QT_DEPLOY_TARGET_QMAKE_PATH} STREQUAL "")
+                         
+                        if (__QT_DEPLOY_VERBOSE) 
+                            message("Using the linuxdeployqt utility to support plugins: ${__QT_SECONDARY_DEPLOY_TOOL}")
+                        endif()
+                    
                         execute_process(
                             COMMAND_ECHO STDOUT
                             COMMAND "${__QT_SECONDARY_DEPLOY_TOOL}" "${QT_DEPLOY_PREFIX}/${exe_dir}/${__executable_file_name}" -qmake=${__QT_DEPLOY_TARGET_QMAKE_PATH}
