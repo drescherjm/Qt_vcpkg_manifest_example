@@ -54,7 +54,7 @@ if (QT_VERSION_MAJOR EQUAL 6)
 	endif()
 endif()
 
-include(CMake/InstallTargetRuntimeDependencies.cmake)
+#include(CMake/InstallTargetRuntimeDependencies.cmake)
 
 install(TARGETS ${LOCAL_PROJECT_NAME}
 	RUNTIME_DEPENDENCY_SET MyDeps
